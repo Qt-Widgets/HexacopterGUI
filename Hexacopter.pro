@@ -27,7 +27,9 @@ SOURCES += main.cpp\
     gateway-linux/src/linux/hal/hal_can.cpp \
     gateway-linux/src/linux/hal/hal_uart.cpp \
     gateway-linux/src/linux/hw_udp.cpp \
-    qcustomplot/qcustomplot.cpp
+    qcustomplot/qcustomplot.cpp \
+    myitem.cpp \
+    opticaltracking.cpp
 
 HEADERS += mainwindow.h \
         copter.h \
@@ -51,10 +53,15 @@ HEADERS += mainwindow.h \
     gateway-linux/api/stream-bytesex.h \
     gateway-linux/api/udp.h \
     gateway-linux/src/linux/hw_udp.h \
-    qcustomplot/qcustomplot.h
+    qcustomplot/qcustomplot.h \
+    gateway-linux/api/gateway/topiclistreport.h \
+    topics.h \
+    myitem.h \
+    opticaltracking.h
 
 FORMS   += mainwindow.ui
 
+LIBS += -L/usr/local/lib -lvrpn -lquat -pthread
 
 #VPATH += ../shared
 #INCLUDEPATH += ../shared

@@ -33,8 +33,9 @@ typedef struct PID_values_s{
 
 typedef struct debug_s{
     state_s state;
-    PID_values_t in, out;
+    PID_values_t pid;
     RODOS::Vector3D torque, error;
+    RODOS::Vector6D motor;
 } debug_t;
 
 typedef struct motor_cmd_s{

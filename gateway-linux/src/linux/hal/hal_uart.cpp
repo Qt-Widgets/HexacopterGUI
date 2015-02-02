@@ -68,6 +68,7 @@ int HAL_UART::init(unsigned int iBaudrate) {
     case 38400: baud = QSerialPort::Baud38400;break;
     case 57600: baud = QSerialPort::Baud57600;break;
     case 115200: baud = QSerialPort::Baud115200;break;
+    case 921600: baud = QSerialPort::Baud921600;break;
     }
 
     context->serial->setBaudRate(baud);
