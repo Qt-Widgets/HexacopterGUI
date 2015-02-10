@@ -16,7 +16,7 @@
 
 #define MY_NORTH    3.0f //30.8f
 
-static HAL_UART uart(UART_IDX0); //UART_IDX2);    // rfcomm0
+static HAL_UART uart(UART_IDX2); //UART_IDX2);    // rfcomm0
 static LinkinterfaceUART linkif(&uart);
 
 static double yAxis = 50;
@@ -41,6 +41,9 @@ uint32_t bigEndianToInt32_t(const void* buff) {
             |  ((uint32_t)(byteStream[3]));
 }
 
+PID_values_t rpy[3];
+int lastIndex;
+
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
@@ -53,11 +56,13 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->widget_tr->setLayout(hlayout);
     hlayout->addWidget(glWidget);
 
-    ot = new OpticalTracking(this);
-//    ot->start();
-//    connect(ot, SIGNAL(ot_attitude(double,double,double)), this, SLOT(get_OT_Attitude(double,double,double)));
+    lastIndex = ui->comboBox->currentIndex();
 
-    uart.init(921600);
+    ot = new OpticalTracking(this);
+    //    ot->start();
+    //    connect(ot, SIGNAL(ot_attitude(double,double,double)), this, SLOT(get_OT_Attitude(double,double,double)));
+
+    uart.init(115200);
     gw.init();
     gw.setPutter(this);
     timer = new QTimer(this);
@@ -135,13 +140,13 @@ RODOS::YPR ypr;
 State_t* state;
 
 bool MainWindow::putGeneric(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo){
-//        qDebug() << QTime::currentTime() << "Received Topic ID" << topicId << "widget count" << ui->listWidget->count();
-//        qDebug() << cntSelectedTopics;
-//    if(cnt != 8){
-//        cnt++;
-//        return false;
-//    }
-//    cnt = 0;
+    //        qDebug() << QTime::currentTime() << "Received Topic ID" << topicId << "widget count" << ui->listWidget->count();
+    //        qDebug() << cntSelectedTopics;
+    //    if(cnt != 8){
+    //        cnt++;
+    //        return false;
+    //    }
+    //    cnt = 0;
 
     double *data = (double *)msg;
 
@@ -253,12 +258,10 @@ void MainWindow::pollGateway(){
 }
 
 void MainWindow::on_setOPID_clicked(){
-    PID_values_t PID;
-    PID.roll = RODOS::Vector3D(ui->oProll->value(), ui->oIroll->value(), ui->oDroll->value());
-    PID.pitch = RODOS::Vector3D(ui->oPpitch->value(), ui->oIpitch->value(), ui->oDpitch->value());
-    PID.yaw = RODOS::Vector3D(ui->oPyaw->value(), ui->oIyaw->value(), ui->oDyaw->value());
+    int idx = ui->comboBox->currentIndex();
+    on_comboBox_currentIndexChanged(idx);
     char msg[100];
-    int length = gw.createNetworkMessage((char*)&PID,sizeof(PID),SET_PID_VALUES_TID,NOW(),(char*) msg);
+    int length = gw.createNetworkMessage((char*)&rpy[idx],sizeof(rpy[idx]),SET_PID_VALUES_TID + idx,NOW(),(char*) msg);
     uart.write(msg, length);
 }
 
@@ -306,38 +309,29 @@ void MainWindow::on_pushButton_load_clicked(){
                                      file.errorString());
             return;
         }
-//        file.read(5 + sizeof(PID_values_t));
+        //        file.read(5 + sizeof(PID_values_t));
         QByteArray data = file.read(4);
         QString start(data);
         if(start.compare("PID:") == 0){
-            data = file.read(72);
-            PID_values_t oPID = (*(PID_values_t *) data.data());
-            ui->oProll->setValue(oPID.roll.x);
-            ui->oIroll->setValue(oPID.roll.y);
-            ui->oDroll->setValue(oPID.roll.z);
-            ui->oPpitch->setValue(oPID.pitch.x);
-            ui->oIpitch->setValue(oPID.pitch.y);
-            ui->oDpitch->setValue(oPID.pitch.z);
-            ui->oPyaw->setValue(oPID.yaw.x);
-            ui->oIyaw->setValue(oPID.yaw.y);
-            ui->oDyaw->setValue(oPID.yaw.z);
-        } /*else { //Convert old PID file into new
-            data = file.read(72);
-            qDebug() << start;
-            data = file.read(5);
-            qDebug() << data;
-            data = file.read(72);
-            PID_values_t oPID = (*(PID_values_t *) data.data());
-            ui->oProll->setValue(oPID.roll.x);
-            ui->oIroll->setValue(oPID.roll.y);
-            ui->oDroll->setValue(oPID.roll.z);
-            ui->oPpitch->setValue(oPID.pitch.x);
-            ui->oIpitch->setValue(oPID.pitch.y);
-            ui->oDpitch->setValue(oPID.pitch.z);
-            ui->oPyaw->setValue(oPID.yaw.x);
-            ui->oIyaw->setValue(oPID.yaw.y);
-            ui->oDyaw->setValue(oPID.yaw.z);
-        }*/
+            for(int index = 0; index < 3; index++){
+                data = file.read(sizeof(PID_values_t));
+                PID_values_t PID = (*(PID_values_t *) data.data());
+                rpy[index] = PID;
+                if(index == ui->comboBox->currentIndex()){
+                    ui->doubleSpinBox_inP->setValue(rpy[index].inner.x);
+                    ui->doubleSpinBox_inI->setValue(rpy[index].inner.y);
+                    ui->doubleSpinBox_inD->setValue(rpy[index].inner.z);
+                    ui->doubleSpinBox_outP->setValue(rpy[index].outer.x);
+                    ui->doubleSpinBox_outI->setValue(rpy[index].outer.y);
+                    ui->doubleSpinBox_outD->setValue(rpy[index].outer.z);
+                    ui->doubleSpinBox_outLimit->setValue(rpy[index].outerLimit);
+                    ui->doubleSpinBox_filterW->setValue(rpy[index].omegaAlpha);
+                    ui->doubleSpinBox_filterDeltaW->setValue(rpy[index].deltaOmegaAlpha);
+                }
+            }
+        } else {
+            qDebug() << "Wrong file format";
+        }
     }
     windowOpen = false;
 }
@@ -362,14 +356,21 @@ void MainWindow::on_pushButton_save_clicked(){
             return;
         }
 
-        PID_values_t PID;
-        PID.roll = RODOS::Vector3D(ui->oProll->value(), ui->oIroll->value(), ui->oDroll->value());
-        PID.pitch = RODOS::Vector3D(ui->oPpitch->value(), ui->oIpitch->value(), ui->oDpitch->value());
-        PID.yaw = RODOS::Vector3D(ui->oPyaw->value(), ui->oIyaw->value(), ui->oDyaw->value());
+
+        int idx = ui->comboBox->currentIndex();
+        rpy[idx].inner = RODOS::Vector3D(ui->doubleSpinBox_inP->value(), ui->doubleSpinBox_inI->value(), ui->doubleSpinBox_inD->value());
+        rpy[idx].outer = RODOS::Vector3D(ui->doubleSpinBox_outP->value(), ui->doubleSpinBox_outI->value(), ui->doubleSpinBox_outD->value());
+        rpy[idx].outerLimit = ui->doubleSpinBox_outLimit->value();
+        rpy[idx].omegaAlpha = ui->doubleSpinBox_filterW->value();
+        rpy[idx].deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW->value();
+
 
         char start[] = "PID:";
         file.write(start,4);
-        file.write((char*)&PID,sizeof(PID));
+        for(idx = 0; idx < 3; idx++){
+            //            qDebug() << idx << rpy[idx].outer.x;
+            file.write((char*)&rpy[idx],sizeof(rpy[idx]));
+        }
         file.close();
     }
     windowOpen = false;
@@ -551,8 +552,31 @@ void MainWindow::on_pushButton_plot_clicked(){
 void MainWindow::on_pushButton_setRPY_clicked(){
     double roll = ui->spinBox_desRoll->value() / 180. * M_PI;
     double pitch = ui->spinBox_desPitch->value() / 180. * M_PI;
-    RODOS::YPR ypr(0,pitch,roll);
+    double yaw = ui->spinBox_desYaw->value() / 180. * M_PI;
+    RODOS::YPR ypr(yaw,pitch,roll);
     char msg[100];
     int length = gw.createNetworkMessage((char*)&ypr,sizeof(ypr),DESIRED_YPR_TID,NOW(),(char*) msg);
     uart.write(msg, length);
+}
+
+void MainWindow::on_comboBox_currentIndexChanged(int index)
+{
+    rpy[lastIndex].inner = RODOS::Vector3D(ui->doubleSpinBox_inP->value(), ui->doubleSpinBox_inI->value(), ui->doubleSpinBox_inD->value());
+    rpy[lastIndex].outer = RODOS::Vector3D(ui->doubleSpinBox_outP->value(), ui->doubleSpinBox_outI->value(), ui->doubleSpinBox_outD->value());
+    rpy[lastIndex].outerLimit = ui->doubleSpinBox_outLimit->value();
+    rpy[lastIndex].omegaAlpha = ui->doubleSpinBox_filterW->value();
+    rpy[lastIndex].deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW->value();
+
+    lastIndex = index;
+
+    ui->doubleSpinBox_inP->setValue(rpy[index].inner.x);
+    ui->doubleSpinBox_inI->setValue(rpy[index].inner.y);
+    ui->doubleSpinBox_inD->setValue(rpy[index].inner.z);
+    ui->doubleSpinBox_outP->setValue(rpy[index].outer.x);
+    ui->doubleSpinBox_outI->setValue(rpy[index].outer.y);
+    ui->doubleSpinBox_outD->setValue(rpy[index].outer.z);
+    ui->doubleSpinBox_outLimit->setValue(rpy[index].outerLimit);
+    ui->doubleSpinBox_filterW->setValue(rpy[index].omegaAlpha);
+    ui->doubleSpinBox_filterDeltaW->setValue(rpy[index].deltaOmegaAlpha);
+
 }

@@ -10,7 +10,7 @@
 #define STATE_TID                   (1002 + OFFSET)
 
 #define SET_PID_VALUES_TID          3001
-#define TOPICS_TO_FORWARD_TID       3002
+#define TOPICS_TO_FORWARD_TID       3004
 
 #define ENGINE_CTRL_TID             2001
 #define DESIRED_YPR_TID             2002

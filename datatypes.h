@@ -28,7 +28,9 @@ typedef struct Euler_s{
 }Euler_t;
 
 typedef struct PID_values_s{
-    RODOS::Vector3D roll, pitch, yaw;
+    RODOS::Vector3D inner, outer;
+    double outerLimit;
+    double omegaAlpha, deltaOmegaAlpha;
 }PID_values_t;
 
 typedef struct debug_s{

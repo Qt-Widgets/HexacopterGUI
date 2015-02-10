@@ -69,6 +69,8 @@ private slots:
     void on_pushButton_plot_clicked();
     void on_pushButton_setRPY_clicked();
 
+    void on_comboBox_currentIndexChanged(int index);
+
 protected:
     void keyPressEvent(QKeyEvent* event);
 
