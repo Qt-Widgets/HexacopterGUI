@@ -48,7 +48,6 @@ Topic myTopics[] = {
                     {2003 + OFFSET, "Desired Height", "height_set", sizeof(double) / sizeof(double)},
                     {2004 + OFFSET, "Remote Thrust", "thrust_set", sizeof(double) / sizeof(double)},
                     {1042 + OFFSET, "Thrust", "thrust", sizeof(double) / sizeof(double)},
-
                     {1043 + OFFSET, "Motor CMD", "r1,r2,r3,r4,r5,r6", sizeof(Motor_cmd_t) / sizeof(double)},
 
 
