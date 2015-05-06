@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>info8.jpg</file>
+        <file>robex.png</file>
+    </qresource>
+</RCC>

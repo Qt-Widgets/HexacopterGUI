@@ -1,0 +1,233 @@
+#include "gpstracking.h"
+
+
+GPSTracking::GPSTracking(Ui::MainWindow* u,QmySerial* serial){
+    this->serial=serial;
+    this->ui=u;
+    //set basic signals/slots
+    connect(ui->gpsButton_clear,SIGNAL(clicked()),this,SLOT(clearTracking()));
+    connect(ui->gpscomboBox_map,SIGNAL(currentIndexChanged(int)),this,SLOT(handleMapSelection(int)));
+    connect(ui->gpsButton_save1,SIGNAL(clicked()), this,SLOT(saveTracking()));
+    connect(ui->gpsButton_load1,SIGNAL(clicked()),this,SLOT(loadDialog()));
+    connect(ui->gpscheckBox_follow,SIGNAL(clicked()),this,SLOT(handleSettings()));
+    connect(ui->gpscheckBox_marker,SIGNAL(clicked()),this,SLOT(handleSettings()));
+    connect(ui->gpsstartButton,SIGNAL(clicked()),this,SLOT(start()));
+    connect(ui->gpsStopButton,SIGNAL(clicked()),this,SLOT(stop()));
+
+
+
+   //maps
+    ui->gpscomboBox_map->addItem("Open Layers");
+    ui->gpscomboBox_map->addItem(QString("Google Maps"));// Fill Map Chooser
+
+    ui->gpswebView1->load(QUrl("qrc:/oTracking.html"));// Load Open Layers as Default
+    ui->gpswebView2->load(QUrl("qrc:/gPlannedPath.html"));
+
+    showGoogleLogo();
+    setCoordsView();
+    latitude=longitude=height=0;
+    ui->gpslcdNumber_speed->setPalette(Qt::black);
+    ui->gpslcdNumber_speed->display(0);
+}
+
+// setzt eine map je nach wahl innerhalb der combobox
+void GPSTracking::handleMapSelection(int option){
+    if(option==1){
+        ui->gpswebView1->load(QUrl("qrc:/gTracking.html"));
+    }
+    else{
+        ui->gpswebView1->load(QUrl("qrc:/oTracking.html"));
+    }
+    connect(this->ui->gpswebView1->page()->mainFrame(), SIGNAL(javaScriptWindowObjectCleared()),
+                           this, SLOT(setJsObject()));
+    connect(ui->gpswebView1,SIGNAL(loadFinished(bool)),this,SLOT(transferCoords(bool)));
+}
+
+//uebergibt die bestehenden Koordinaten an die neu ausgewaehlte Map
+void GPSTracking::transferCoords(bool){
+    for(int i=0;i<coordinateTracking.length();i++){
+    evalJs(QString("setPath(%1,%2)").arg(QString::number((double)coordinateTracking[i].getLat(), 'f', 7)).arg(QString::number((double)coordinateTracking[i].getLng(), 'f', 7)));
+    }
+    handleSettings();
+}
+
+//setzt ein Objekt zur Kommunikation mit der Js-Klasse - Möglichkeit der Übergabe von Variablen aus Js an die C++-Klasse
+void GPSTracking::setJsObject(){
+    this->ui->gpswebView1->page()->mainFrame()->addToJavaScriptWindowObject("tracking",this);
+    this->ui->gpswebView2->page()->mainFrame()->addToJavaScriptWindowObject("planned",this);
+}
+
+//handled die Verbindung zwischen der Klasse und dem JavaScript der HTML des WebView
+void GPSTracking::evalJs(const QString &jsfunction){
+    this->ui->gpswebView1->page()->mainFrame()->evaluateJavaScript(jsfunction);
+}
+
+//uebergibt eintreffende Koordinaten an das JavaScript mittels der Funktion evalJS
+void GPSTracking::frameGPSRecieved(QList<float>* data){
+    if(!ui->gpsstartButton->isEnabled()){
+       currentCoords.setAll(data->at(0),data->at(1),data->at(2));
+       coordinateTracking.append(currentCoords);
+       evalJs(QString("setPath(%1,%2)").arg(QString::number((double)data->at(0), 'f', 7)).arg(QString::number((double)data->at(1), 'f', 7)));
+       setCoordsData();
+       handleSettings();
+    }
+}
+
+void GPSTracking::start(){
+    ui->gpsstartButton->setEnabled(false);
+    ui->gpsStopButton->setEnabled(true);
+    enableTelemetry();
+}
+void GPSTracking::stop(){
+    ui->gpsstartButton->setEnabled(true);
+    ui->gpsStopButton->setEnabled(false);
+}
+
+//prueft die gesetzten Mapsettings
+void GPSTracking::handleSettings()
+{
+     if(ui->gpscheckBox_marker->checkState()==2){
+         evalJs(QString("display(%1)").arg(1));
+    }
+     else{
+         evalJs(QString("display(%1)").arg(0));
+    }
+    if(ui->gpscheckBox_follow->checkState()==2){
+        evalJs(QString("setCenter()"));
+    }
+}
+/*beide nachfolgenden Funktionen: Koordinatenanzeige für QTabView*/
+void GPSTracking::setCoordsView(){
+    model= new QStandardItemModel();
+    model->setHorizontalHeaderItem(0,new QStandardItem("Longitude"));
+    model->setHorizontalHeaderItem(1,new QStandardItem("Latitude"));
+    model->setHorizontalHeaderItem(2,new QStandardItem("Height"));
+    ui->gpstableView_1->setModel(model);
+}
+void GPSTracking::setCoordsData(){
+    model->setItem(coordinateTracking.length()-1,0,new QStandardItem(QString::number(coordinateTracking[coordinateTracking.length()-1].getLat(), 'g', 7)));
+    model->setItem(coordinateTracking.length()-1,1,new QStandardItem(QString::number(coordinateTracking[coordinateTracking.length()-1].getLng(), 'g', 7)));
+    model->setItem(coordinateTracking.length()-1,2,new QStandardItem(QString::number(coordinateTracking[coordinateTracking.length()-1].getHght(), 'g', 7)));
+}
+
+void GPSTracking::showGoogleLogo(){
+    QPixmap logo ("../qusart-build-desktop/Image/GoogleMaps.jpg");
+    this->ui->gpslabel_logo->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    this->ui->gpslabel_logo->setScaledContents(true);
+    this->ui->gpslabel_logo->setPixmap(logo);
+}
+
+void GPSTracking::clearTracking(){
+    model->clear();
+    setCoordsView();
+    coordinateTracking.clear();
+    evalJs(QString("clear()"));
+}
+
+/*nachfolgende Funktionen werden in GPSPlanning aufgerufen und beziehen sich auf das 2.QWebView, welches den geplannten Weg nach Sendung der Koordinaten an den Quadrokopter, anzeigt*/
+void GPSTracking::showPlannedPath(QList<GPSCoordinate> list){
+    for(int i=0; i<list.length(); i++){
+        ui->gpswebView2->page()->mainFrame()->evaluateJavaScript( QString("setPath(%1,%2)").arg(QString::number((double)list[i].getLat(), 'f', 7)).arg(QString::number((double)list[i].getLng(), 'f', 7)));
+    }
+}
+void GPSTracking::showPlannedCoord(GPSCoordinate coord){
+     ui->gpswebView2->page()->mainFrame()->evaluateJavaScript( QString("setPath(%1,%2)").arg(QString::number((double)coord.getLat(), 'f', 7)).arg(QString::number((double)coord.getLng(), 'f', 7)));
+}
+
+void GPSTracking::clearPlannedPath(void){
+ this->ui->gpswebView2->page()->mainFrame()->evaluateJavaScript("clear()");
+}
+
+void GPSTracking::saveTracking(){
+        QDateTime dateTimeSys = QDateTime::currentDateTime();
+        dateTimeSysString=dateTimeSys.toString("ddd dd.MMM.yyyy hh:mm");
+    QString filename = QFileDialog::getSaveFileName(0,QString(),QString(),"CSV Files (*.csv)");
+    if (!filename.isNull() && !filename.isEmpty())
+    {
+        // Open file
+        QFile save(filename);
+        if (!save.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        {
+                this->ui->console->append(QString("Could not open ").append(filename.trimmed()).append(" for writing.\n"));
+                return;
+        }
+        QTextStream out(&save);
+        out.setLocale(QLocale::system());
+        out<<";"<<"GPS Tracking List"<<"\n";
+        out<<"Date of Tracking:"<<dateTimeSysString<<"\n";
+        out<<"Latitude"<<";"<<"Longitude"<<";"<<"Height"<<"\n";
+        // Write config
+        for(int i=0;i<coordinateTracking.length();i++)
+        {   GPSCoordinate tracking=coordinateTracking.at(i);
+            out<<QString::number(tracking.getLat(), 'g', 7)<<";"<<QString::number(tracking.getLng(), 'g', 7)<<";"<<QString::number(tracking.getHght(), 'g', 7)<<"\n";
+        }
+        out.flush();
+        save.close();
+    }
+}
+
+void GPSTracking::enableTelemetry(){
+    Frame f;
+    f.addMessage(ENABLE_TELEMETRY);
+    f.addValue((int)GPS_DEBUG);
+    f.endAndSendFrame(serial);
+}
+
+void GPSTracking::loadTracking(){
+       clearTracking();
+       QString filename = QFileDialog::getOpenFileName(this,
+                                       QString(),
+                                      QString(),
+                                       tr("Config file (*.csv)"));
+       if (!filename.isNull() && !filename.isEmpty()) {
+               // Open file
+               QFile load(filename);
+               if (!load.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                       this->ui->console->append(QString("Could not open ").append(filename.trimmed()).append(" for reading.\n"));
+                       return;
+               }
+
+               QTextStream in(&load);
+               in.setLocale(QLocale::system());
+               QString line;
+               int i=0;
+               while (!in.atEnd()) {
+                       line = in.readLine();
+                       if(i>2){
+                       QStringList items=line.split(";",QString::SkipEmptyParts);
+                       currentCoords.setAll(items[0].toDouble(),items[1].toDouble(),items[2].toDouble());
+                       coordinateTracking.append(currentCoords);
+                       evalJs(QString("setPath(%1,%2)").arg(QString::number(currentCoords.getLat(), 'g', 7)).arg(QString::number(currentCoords.getLng(), 'g', 7)));
+                       setCoordsData();
+                       handleSettings();
+                   }
+                       i++;
+                   }
+           }
+}
+
+void GPSTracking::loadDialog(){
+    QMessageBox msgBox;
+     msgBox.setText("Are you sure you want to delete all further data? ");
+     msgBox.addButton(QMessageBox::Yes);
+     msgBox.addButton(QMessageBox::No);
+     msgBox.addButton(QMessageBox::Save);
+
+       int selection = msgBox.exec();
+       if(selection == QMessageBox::Yes){
+           loadTracking();
+       }
+       else if(selection == QMessageBox::No)
+       {
+       }
+       else if(selection == QMessageBox::Save){
+           saveTracking();
+           loadTracking();
+       }
+}
+
+GPSTracking::~GPSTracking()
+{
+
+}
+

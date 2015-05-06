@@ -1,0 +1,12 @@
+<RCC>
+    <qresource prefix="/">
+        <file>gPlanning.html</file>
+        <file>gPlanning.js</file>
+        <file>gTracking.html</file>
+        <file>gTracking.js</file>
+        <file>oTracking.html</file>
+        <file>oTracking.js</file>
+        <file>gPlannedPath.html</file>
+        <file>gPlannedPath.js</file>
+    </qresource>
+</RCC>
