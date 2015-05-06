@@ -13,7 +13,8 @@
 #include "gateway-linux/api/hal.h"
 
 #include "opticaltracking.h"
-
+#include <gpscontrol/gpstracking.h>
+#include "datatypes.h"
 
 static QString colorplate[] = {"aquamarine", "blue", "blueviolet", "brown", "cadetblue", "chartreuse",
                                "coral", "cornflowerblue", "crimson", "darkblue", "darkcyan",
@@ -48,6 +49,7 @@ public slots:
 
 signals:
     void imuChanged(float roll,float pitch,float yaw);
+    void gpsLLH(double lat, double lon, double height);
 
 private slots:
     void on_setOPID_clicked();
@@ -71,6 +73,12 @@ private slots:
 
     void on_comboBox_currentIndexChanged(int index);
 
+    void on_pushButton_save_alt_clicked();
+
+    void on_pushButton_load_alt_clicked();
+
+    void on_setOPID_alt_clicked();
+
 protected:
     void keyPressEvent(QKeyEvent* event);
 
@@ -79,13 +87,15 @@ private:
     QTimer *timer;
     Ui::MainWindow *ui;
     GLWidget *glWidget;
-//    QSerialPort *serial;
     QByteArray message;
     bool ff;
     bool gettingMessage;
     double start, lastTime;
     int cntSelectedTopics;
     OpticalTracking *ot;
+    GPSTracking *gpsTracking;
+    PID_values_t rpy[3];
+    int lastIndex;
 };
 
 #endif // MAINWINDOW_H

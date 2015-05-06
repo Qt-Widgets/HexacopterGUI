@@ -271,6 +271,7 @@ void Gateway::pollMessages() {
                 } else {
                     if(realMsgSize >= ((int32_t)sizeof(NetworkMessage)-MAX_NETWORK_MESSAGE_LENGTH)) {
                         if(realMsgSize == (int32_t)networkInMessage.numberOfBytesToSend()) {
+//                            qDebug() << "Message expected size"<< networkInMessage.numberOfBytesToSend()<<"== real size" << realMsgSize;
                             AnalyseAndDistributeMessagesFromNetwork();
                         } else {
 //                            qDebug() << "Message dropped because expected size"<< networkInMessage.numberOfBytesToSend()<<"!= real size" << realMsgSize;

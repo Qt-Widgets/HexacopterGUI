@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui opengl widgets serialport printsupport
+QT       += core gui opengl widgets serialport printsupport webkit webkitwidgets
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -29,7 +29,9 @@ SOURCES += main.cpp\
     gateway-linux/src/linux/hw_udp.cpp \
     qcustomplot/qcustomplot.cpp \
     myitem.cpp \
-    opticaltracking.cpp
+    opticaltracking.cpp \
+    gpscontrol/gpscoordinate.cpp \
+    gpscontrol/gpstracking.cpp
 
 HEADERS += mainwindow.h \
         copter.h \
@@ -57,39 +59,16 @@ HEADERS += mainwindow.h \
     gateway-linux/api/gateway/topiclistreport.h \
     topics.h \
     myitem.h \
-    opticaltracking.h
+    opticaltracking.h \
+    gpscontrol/gpscoordinate.h \
+    gpscontrol/gpstracking.h
 
 FORMS   += mainwindow.ui
 
 LIBS += -L/usr/local/lib -lvrpn -lquat -pthread
 
-#VPATH += ../shared
-#INCLUDEPATH += ../shared
+RESOURCES += gpscontrol/gps.qrc \
+            img/img.qrc
 
-#HEADERS       = glwidget.h \
-#                window.h \
-#                qtlogo.h
-#SOURCES       = glwidget.cpp \
-#                main.cpp \
-#                window.cpp \
-#                qtlogo.cpp
-#QT           += opengl widgets serialport
-
-## install
-#target.path = $$[QT_INSTALL_EXAMPLES]/opengl/hellogl
-#INSTALLS += target
-
-#contains(QT_CONFIG, opengles.) {
-#    contains(QT_CONFIG, angle): \
-#        warning("Qt was built with ANGLE, which provides only OpenGL ES 2.0 on top of DirectX 9.0c")
-#    error("This example requires Qt to be configured with -opengl desktop")
-#}
-
-
-
-#unix:!macx: LIBS += -L$$PWD/../git/rodos-core/libs/linux_x86/ -lrodos
-
-#INCLUDEPATH += $$PWD/../git/rodos-core/libs/linux_x86
-#DEPENDPATH += $$PWD/../git/rodos-core/libs/linux_x86
-
-#unix:!macx: PRE_TARGETDEPS += $$PWD/../git/rodos-core/libs/linux_x86/librodos.a
+OTHER_FILES += gpscontrol/gTracking.html \
+               gpscontrol/gTracking.js

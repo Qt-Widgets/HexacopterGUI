@@ -14,7 +14,10 @@
 #include "topics.h"
 #include "myitem.h"
 
+
 #define MY_NORTH    3.0f //30.8f
+
+//#define OT
 
 static HAL_UART uart(UART_IDX2); //UART_IDX2);    // rfcomm0
 static LinkinterfaceUART linkif(&uart);
@@ -41,8 +44,7 @@ uint32_t bigEndianToInt32_t(const void* buff) {
             |  ((uint32_t)(byteStream[3]));
 }
 
-PID_values_t rpy[3];
-int lastIndex;
+
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -50,17 +52,47 @@ MainWindow::MainWindow(QWidget *parent) :
     Putter()
 {
     ui->setupUi(this);
+
+    QPixmap i8Map("img/info8.jpg");
+    i8Map = i8Map.scaled(40,40,Qt::KeepAspectRatio);
+    ui->label_i8->setPixmap(i8Map);
+    ui->label_i8->setMask(i8Map.mask());
+    ui->label_i8->show();
+
+    QPixmap robexMap("img/robex.png");
+    robexMap = robexMap.scaled(40,40,Qt::KeepAspectRatio);
+    ui->label_robex->setPixmap(robexMap);
+    ui->label_robex->setMask(robexMap.mask());
+    ui->label_robex->show();
+
+    QString myStyleSheet =
+            "QProgressBar {"
+            "border: 2px solid grey;"
+            "border-radius: 5px;"
+            "text-align: center;"
+            "}"
+
+            "QProgressBar::chunk {"
+            "background-color: white;"
+            "margin: 0.5px;"
+            "width: 10px"
+            "}";
+     ui->batteryStatus->setStyleSheet(myStyleSheet);
+
     glWidget = new GLWidget;
-    this->setCentralWidget(ui->tabWidget);
     QHBoxLayout *hlayout = new QHBoxLayout;
     ui->widget_tr->setLayout(hlayout);
     hlayout->addWidget(glWidget);
 
     lastIndex = ui->comboBox->currentIndex();
 
+    gpsTracking = new GPSTracking(ui);
+    connect(this, SIGNAL(gpsLLH(double,double,double)), gpsTracking, SLOT(frameGPSRecieved(double,double,double)));
+#ifdef OT
     ot = new OpticalTracking(this);
-    //    ot->start();
-    //    connect(ot, SIGNAL(ot_attitude(double,double,double)), this, SLOT(get_OT_Attitude(double,double,double)));
+    ot->start();
+    connect(ot, SIGNAL(ot_attitude(double,double,double)), this, SLOT(get_OT_Attitude(double,double,double)));
+#endif
 
     uart.init(115200);
     gw.init();
@@ -82,7 +114,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
 
 
-    int i, graphID = 0;
+    unsigned int i, graphID = 0;
     for(i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
         TopicItem* topicItem = new TopicItem();
         topicItem->setText(myTopics[i].name);
@@ -129,7 +161,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
+#ifdef OT
     ot->quit();
+#endif
     delete ui;
 }
 
@@ -137,40 +171,108 @@ int cnt = 0;
 bool windowOpen = false;
 double gas;
 RODOS::YPR ypr;
-State_t* state;
+Attitude_t* attitude_state;
+Sensor_GPS_t* gps;
+Sensor_Voltage_t* battery;
+Flight_states_t* state;
 
 bool MainWindow::putGeneric(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo){
-    //        qDebug() << QTime::currentTime() << "Received Topic ID" << topicId << "widget count" << ui->listWidget->count();
-    //        qDebug() << cntSelectedTopics;
-    //    if(cnt != 8){
-    //        cnt++;
-    //        return false;
-    //    }
-    //    cnt = 0;
-
     double *data = (double *)msg;
 
+//    qDebug() << topicId;
+    long alive = topicId;
+    char dat[100];
+//    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) dat);
+//    uart.write(dat, length);
+
+    if(topicId == BAT_TID){
+
+        battery = (Sensor_Voltage_t*) msg;
+
+        // Battery Color
+        QString myStyleSheet =
+                "QProgressBar {"
+                "border: 2px solid grey;"
+                "border-radius: 5px;"
+                "text-align: center;"
+                "}"
+
+                "QProgressBar::chunk {"
+                "background-color:";
+        if(battery->percent < 0.3)
+            myStyleSheet.append(" red;");
+        else if(battery->percent < 0.65)
+            myStyleSheet.append(" orange;");
+        else
+            myStyleSheet.append(" Lime;");
+
+
+        myStyleSheet.append("margin: 0.5px;"
+                            "width: 10px"
+                            " }");
+
+        ui->batteryStatus->setStyleSheet(myStyleSheet);
+        ui->batteryStatus->setValue(battery->percent * 100);
+
+    }
+
     if(topicId == STATE_TID){
-        state = (State_t*) msg;
-        ypr = state->q.toYPR();
+         state = (Flight_states_t*) msg;
+        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
+
+        switch (*state) {
+        case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
+            ui->flight_state->setText("MOTOR OFF");
+            break;
+        case ARMED:
+            ui->flight_state->setText("ARMED");
+            break;
+        case TAKE_OFF:
+            ui->flight_state->setText("TAKE OFF");
+            break;
+        case ALTITUDE_HOLD:
+            ui->flight_state->setText("ALTITUDE HOLD");
+            break;
+        case MANUAL_FLIGHT:
+            ui->flight_state->setText("MANUAL FLIGHT");
+            break;
+        case LANDING:
+            ui->flight_state->setText("LANDING");
+            break;
+        default:
+            break;
+        }
+    }
+
+    if(topicId == ATTITUDE_TID){
+        attitude_state = (Attitude_t*) msg;
+        ypr = attitude_state->q.toYPR();
     } else if (ui->tabWidget_2->currentIndex() == 0){
         return false;
     }
+
+    if(topicId == GPS_TID){
+        gps = (Sensor_GPS_t*) msg;
+        emit gpsLLH(gps->lat, gps->lon, gps->height);
+    }
+
+
+
     double time = QTime::currentTime().msecsSinceStartOfDay() / 1000. - start;
     if(!windowOpen){
 
         if(ui->tabWidget_2->currentIndex() == 0){
             emit imuChanged(ypr.roll * 180 / M_PI, ypr.pitch  * 180 / M_PI, (ypr.yaw  * 180 / M_PI) - MY_NORTH);
-            ui->q0->display(state->q.q0);
-            ui->q1->display(state->q.q.x);
-            ui->q2->display(state->q.q.y);
-            ui->q3->display(state->q.q.z);
+            ui->q0->display(attitude_state->q.q0);
+            ui->q1->display(attitude_state->q.q.x);
+            ui->q2->display(attitude_state->q.q.y);
+            ui->q3->display(attitude_state->q.q.z);
             ui->roll->display(ypr.roll * 180 / M_PI);
             ui->pitch->display(ypr.pitch * 180 / M_PI);
             ui->yaw->display(ypr.yaw * 180 / M_PI);
-            ui->wroll->display(state->w.x);
-            ui->wpitch->display(state->w.y);
-            ui->wyaw->display(state->w.z);
+            ui->wroll->display(attitude_state->w.x);
+            ui->wpitch->display(attitude_state->w.y);
+            ui->wyaw->display(attitude_state->w.z);
         } else {
             // For all available topics
             for(int i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
@@ -197,7 +299,7 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
                                 ui->customPlot->graph(graphID)->setPen(QPen(mycolor));
                                 ui->customPlot->graph(graphID)->addToLegend();
                             }
-                            if(topicId == STATE_TID && j > 6){
+                            if(topicId == ATTITUDE_TID && j > 6){
                                 switch (j) {
                                 case 7:
                                     ui->customPlot->graph(graphID)->addData(time, ypr.roll * 180 / M_PI);
@@ -250,10 +352,6 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
 
 void MainWindow::pollGateway(){
     gw.pollMessages();
-    char alive = ACTIVE;
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
     timer->start(15);
 }
 
@@ -330,7 +428,8 @@ void MainWindow::on_pushButton_load_clicked(){
                 }
             }
         } else {
-            qDebug() << "Wrong file format";
+            QMessageBox::information(this, tr("Wrong file format"),
+                                     file.errorString());
         }
     }
     windowOpen = false;
@@ -475,6 +574,7 @@ void MainWindow::sendSelectedTopics()
     int length = gw.createNetworkMessage((char*)&topicIDs,topicIDs.numberOfBytesToSend(),TOPICS_TO_FORWARD_TID,NOW(),(char*) msg);
     uart.write(msg, length);
 }
+
 int precnt = 0;
 void MainWindow::get_OT_Attitude(double roll, double pitch, double yaw)
 {
@@ -579,4 +679,94 @@ void MainWindow::on_comboBox_currentIndexChanged(int index)
     ui->doubleSpinBox_filterW->setValue(rpy[index].omegaAlpha);
     ui->doubleSpinBox_filterDeltaW->setValue(rpy[index].deltaOmegaAlpha);
 
+}
+
+void MainWindow::on_pushButton_save_alt_clicked()
+{
+    windowOpen = true;
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save PIDH Values"), "",
+                                                    tr("PIDH Values (*.pidh)"));
+    if (fileName.isEmpty()){
+        windowOpen = false;
+        return;
+    } else {
+        if(!fileName.endsWith(".pidh")){
+            fileName.append(".pidh");
+        }
+
+        QFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly)) {
+            QMessageBox::information(this, tr("Unable to open file"),
+                                     file.errorString());
+            return;
+        }
+
+        PID_values_t altPID;
+        altPID.inner = RODOS::Vector3D(ui->doubleSpinBox_inP_alt->value(), ui->doubleSpinBox_inI_alt->value(), ui->doubleSpinBox_inD_alt->value());
+        altPID.outer = RODOS::Vector3D(ui->doubleSpinBox_outP_alt->value(), ui->doubleSpinBox_outI_alt->value(), ui->doubleSpinBox_outD_alt->value());
+        altPID.outerLimit = ui->doubleSpinBox_outLimit_alt->value();
+        altPID.omegaAlpha = ui->doubleSpinBox_filterW_alt->value();
+        altPID.deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW_alt->value();
+
+        char start[] = "PID_ALT:";
+        file.write(start,8);
+        file.write((char*)&altPID,sizeof(altPID));
+        file.close();
+    }
+    windowOpen = false;
+}
+
+void MainWindow::on_pushButton_load_alt_clicked()
+{
+    windowOpen = true;
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("Save PIDH Values"), "",
+                                                    tr("PIDH Values (*.pidh)"));
+    if (fileName.isEmpty()){
+        windowOpen = false;
+        return;
+    }else {
+
+        QFile file(fileName);
+
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::information(this, tr("Unable to open file"),
+                                     file.errorString());
+            return;
+        }
+        //        file.read(5 + sizeof(PID_values_t));
+        QByteArray data = file.read(8);
+        QString start(data);
+        if(start.compare("PID_ALT:") == 0){
+                data = file.read(sizeof(PID_values_t));
+                PID_values_t PID = (*(PID_values_t *) data.data());
+                    ui->doubleSpinBox_inP_alt->setValue(PID.inner.x);
+                    ui->doubleSpinBox_inI_alt->setValue(PID.inner.y);
+                    ui->doubleSpinBox_inD_alt->setValue(PID.inner.z);
+                    ui->doubleSpinBox_outP_alt->setValue(PID.outer.x);
+                    ui->doubleSpinBox_outI_alt->setValue(PID.outer.y);
+                    ui->doubleSpinBox_outD_alt->setValue(PID.outer.z);
+                    ui->doubleSpinBox_outLimit_alt->setValue(PID.outerLimit);
+                    ui->doubleSpinBox_filterW_alt->setValue(PID.omegaAlpha);
+                    ui->doubleSpinBox_filterDeltaW_alt->setValue(PID.deltaOmegaAlpha);
+        } else {
+            QMessageBox::information(this, tr("Wrong file format"),
+                                     file.errorString());
+        }
+    }
+    windowOpen = false;
+}
+
+void MainWindow::on_setOPID_alt_clicked()
+{
+    PID_values_t altPID;
+    altPID.inner = RODOS::Vector3D(ui->doubleSpinBox_inP_alt->value(), ui->doubleSpinBox_inI_alt->value(), ui->doubleSpinBox_inD_alt->value());
+    altPID.outer = RODOS::Vector3D(ui->doubleSpinBox_outP_alt->value(), ui->doubleSpinBox_outI_alt->value(), ui->doubleSpinBox_outD_alt->value());
+    altPID.outerLimit = ui->doubleSpinBox_outLimit_alt->value();
+    altPID.omegaAlpha = ui->doubleSpinBox_filterW_alt->value();
+    altPID.deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW_alt->value();
+    char msg[100];
+    int length = gw.createNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_ALT_VALUES_TID ,NOW(),(char*) msg);
+    uart.write(msg, length);
 }
