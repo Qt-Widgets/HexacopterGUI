@@ -4,9 +4,10 @@
 #include "QTimer"
 #include <QThread>
 
+#ifdef Q_OS_LINUX
 #include "vrpn_Tracker.h"
 #include "quat.h"
-
+#endif
 
 
 class OpticalTracking : public QThread

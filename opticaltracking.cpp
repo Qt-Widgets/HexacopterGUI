@@ -2,6 +2,7 @@
 #include "QDebug"
 #include "matlib.h"
 
+#ifdef Q_OS_LINUX
 void VRPN_CALLBACK handle_tracker(void *userData, const vrpn_TRACKERCB t)
 {
     RODOS::AngleAxis angleAxis(M_PI/2,1,0,0);
@@ -13,6 +14,7 @@ void VRPN_CALLBACK handle_tracker(void *userData, const vrpn_TRACKERCB t)
     emit ot->ot_attitude(euler.roll - M_PI / 2, -euler.pitch, -euler.yaw);
 }
 
+#endif
 OpticalTracking::OpticalTracking(QObject *parent)
     : QThread(parent)
 {
@@ -22,6 +24,7 @@ OpticalTracking::OpticalTracking(QObject *parent)
 void OpticalTracking::run()
 {
     bool running = true;
+#ifdef Q_OS_LINUX
     vrpn_Tracker_Remote* vrpn_Tracker;
 
     vrpn_Tracker = new vrpn_Tracker_Remote("Rigid Body 1@132.187.210.28");
@@ -31,5 +34,6 @@ void OpticalTracking::run()
     {
         vrpn_Tracker->mainloop();
     }
+#endif
 }
 
