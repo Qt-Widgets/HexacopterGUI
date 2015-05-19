@@ -350,51 +350,6 @@ void Copter::buildGeometry(int divisions, qreal scale)
     QVector3D y(0.0, 1.0, 0.0);
     QVector3D x(1.0, 0.0, 0.0);
 
-//    RectPrism armv(geom, 0.02999, 0.02999, 0.35);
-//    armv.translate(QVector3D(0,0,-0.175));
-//    RectPrism armb(geom, 0.02999, 0.02999, 0.35);
-//    armb.translate(QVector3D(0,0,0.175));
-//    RectPrism arm2(geom, 0.03, 0.03, 0.7);
-//    arm2.rotate(60, y);
-//    RectPrism arm3(geom, 0.03, 0.03, 0.7);
-//    arm3.rotate(120, y);
-
-//    RectTorus rot1(geom, 0.09, 0.12, 0.03, divisions);
-//    rot1.translate(QVector3D(0,0,-0.35));
-//    rot1.rotate(90, x);
-//    RectTorus rot2(geom, 0.09, 0.12, 0.03, divisions);
-//    rot2.translate(QVector3D(0.,0,0.35));
-//    rot2.rotate(90, x);
-//    RectTorus rot3(geom, 0.09, 0.12, 0.03, divisions);
-//    rot3.translate(QVector3D(cos(30./180*M_PI)*0.35,0,sin(30./180*M_PI)*0.35));
-//    rot3.rotate(90, x);
-//    RectTorus rot4(geom, 0.09, 0.12, 0.03, divisions);
-//    rot4.translate(QVector3D(-cos(30./180*M_PI)*0.35,0,-sin(30./180*M_PI)*0.35));
-//    rot4.rotate(90, x);
-//    RectTorus rot5(geom, 0.09, 0.12, 0.03, divisions);
-//    rot5.translate(QVector3D(-cos(30./180*M_PI)*0.35,0,sin(30./180*M_PI)*0.35));
-//    rot5.rotate(90, x);
-//    RectTorus rot6(geom, 0.09, 0.12, 0.03, divisions);
-//    rot6.translate(QVector3D(cos(30./180*M_PI)*0.350,0,-sin(30./180*M_PI)*0.35));
-//    rot6.rotate(90, x);
-
-//    QColor green = QColor::fromRgb(0,200,0);
-//    QColor red = QColor::fromRgb(200,0,0);
-//    QColor blue = QColor::fromRgb(0,0,200);
-
-//    parts << arm2.parts << arm3.parts << rot2.parts << rot3.parts << rot4.parts << rot5.parts << rot6.parts;
-
-//    for (int i = 0; i < parts.count(); ++i)
-//        qSetColor(parts[i]->faceColor, green);
-//    int last = parts.count();
-//    parts << armv.parts << rot1.parts;
-//    for (int i = last; i < parts.count(); ++i)
-//        qSetColor(parts[i]->faceColor, red);
-//    last = parts.count();
-//    parts << armb.parts << rot2.parts;
-//    for (int i = last; i < parts.count(); ++i)
-//        qSetColor(parts[i]->faceColor, blue);
-
     RectPrism arm1(geom, 0.03, 0.03, 0.3);
     arm1.translate(QVector3D(0,0,-0.175));
 

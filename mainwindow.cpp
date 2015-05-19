@@ -9,18 +9,16 @@
 #include <QMessageBox>
 #include <QListWidgetItem>
 
+#include <QSerialPort>
+
 #include "datatypes.h"
 #include "matlib.h"
 #include "topics.h"
 #include "myitem.h"
 
-
 #define MY_NORTH    3.0f //30.8f
 
 //#define OT
-
-static HAL_UART uart(UART_IDX2); //UART_IDX2);    // rfcomm0
-static LinkinterfaceUART linkif(&uart);
 
 static double yAxis = 50;
 static double xAxis = 15;
@@ -31,7 +29,7 @@ int64_t NOW(){
     return (t.tv_sec*1000000LL+t.tv_usec)*1000;
 }
 
-static Gateway gw(&linkif);
+
 
 int cnt2=0;
 
@@ -49,9 +47,19 @@ uint32_t bigEndianToInt32_t(const void* buff) {
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
-    Putter()
+    Putter(),
+    diag()
 {
+
     ui->setupUi(this);
+
+    uart_udp = new HAL_UART_UDP;
+    linkif_udp = new LinkinterfaceUART_UDP(uart_udp);
+    uart = new HAL_UART;
+    linkif = new LinkinterfaceUART(uart);
+
+    connect(&diag, SIGNAL(initConnection(bool, QStringList)), this, SLOT(initGateway(bool,QStringList)));
+    connect(&diag, SIGNAL(disconnect(bool)), this, SLOT(stopGateway(bool)));
 
     QPixmap i8Map("img/info8.jpg");
     i8Map = i8Map.scaled(40,40,Qt::KeepAspectRatio);
@@ -94,13 +102,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ot, SIGNAL(ot_attitude(double,double,double)), this, SLOT(get_OT_Attitude(double,double,double)));
 #endif
 
-    uart.init(115200);
-    gw.init();
-    gw.setPutter(this);
+
     timer = new QTimer(this);
     connect(timer, SIGNAL(timeout()), this, SLOT(pollGateway()));
-    timer->start(15);
-
 
     ui->customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectLegend | QCP::iSelectAxes | QCP::iSelectPlottables);
     QFont legendFont = font();
@@ -111,8 +115,6 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->customPlot->legend->setSelectableParts(QCPLegend::spItems); // legend box shall not be selectable, only legend items
     ui->customPlot->xAxis->setRange(0 - xAxis, 0 + xAxis);
     ui->customPlot->yAxis->setRange(-yAxis, yAxis);
-
-
 
     unsigned int i, graphID = 0;
     for(i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
@@ -146,9 +148,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->customPlot->addGraph();
     ui->customPlot->graph(graphID+1)->removeFromLegend();
 
-    sendSelectedTopics();
     start = QTime::currentTime().msecsSinceStartOfDay() / 1000.;
-
     connect(ui->customPlot, SIGNAL(selectionChangedByUser()), this, SLOT(selectionChanged()));
     connect(ui->customPlot, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(mousePress()));
     connect(ui->customPlot, SIGNAL(mouseWheel(QWheelEvent*)), this, SLOT(mouseWheel()));
@@ -218,7 +218,7 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
 
     if(topicId == STATE_TID){
          state = (Flight_states_t*) msg;
-        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
+//        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
 
         switch (*state) {
         case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
@@ -278,8 +278,6 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
             for(int i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
                 // check if received topic ID is valid
                 if(topicId == myTopics[i].id){
-                    if(!ui->checkBox_stop->isChecked())
-                        ui->customPlot->xAxis->moveRange(time - lastTime);
 
                     // select TopicItem from List
                     TopicItem* topicItem = (TopicItem*) ui->listWidget_Topics->item(i);
@@ -327,7 +325,6 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
                         }
                     }
                     // Euler special case + GUI
-                    lastTime = time;
                     ui->customPlot->replot();
                 }
             }
@@ -351,32 +348,58 @@ bool MainWindow::putGeneric(const long topicId, const unsigned int len, const vo
 }
 
 void MainWindow::pollGateway(){
-    gw.pollMessages();
+
+    if(!ui->checkBox_stop->isChecked()){
+        ui->customPlot->xAxis->moveRange(0.015);
+        ui->customPlot->replot();
+    }    
+    gw->pollMessages();
     timer->start(15);
+}
+
+void MainWindow::initGateway(bool serial, QStringList data)
+{
+    timer->stop();
+    qDebug() << data;
+    if(serial){
+       uart->init(data.at(0).toLocal8Bit().data(),data.at(1).toInt());
+       gw = new Gateway(linkif);
+    } else {
+       uart_udp->init(data.at(0).toLocal8Bit().data(),data.at(1).toLocal8Bit().data(),data.at(2).toInt());
+       gw = new Gateway(linkif_udp);
+    }
+    gw->init();
+    gw->setPutter(this);
+    timer->start(15);
+    sendSelectedTopics();
+}
+
+void MainWindow::stopGateway(bool serial)
+{
+    timer->stop();
+    if(serial){
+       uart->reset();
+    } else {
+       uart_udp->reset();
+    }
 }
 
 void MainWindow::on_setOPID_clicked(){
     int idx = ui->comboBox->currentIndex();
     on_comboBox_currentIndexChanged(idx);
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&rpy[idx],sizeof(rpy[idx]),SET_PID_VALUES_TID + idx,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&rpy[idx],sizeof(rpy[idx]),SET_PID_VALUES_TID + idx,NOW());
 }
 
 void MainWindow::on_pushButton_start_clicked(){
     double button = ACTIVE;
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
     ui->pushButton_start->setEnabled(false);
     ui->pushButton_stop->setEnabled(true);
 }
 
 void MainWindow::on_pushButton_stop_clicked(){
     double button = 0;
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
     ui->pushButton_start->setEnabled(true);
     ui->pushButton_stop->setEnabled(false);
 }
@@ -385,9 +408,7 @@ void MainWindow::on_pushButton_speed_clicked()
 {
     double speed = (double) ui->speed->value();
     gas = ui->speed->value();
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&speed,sizeof(speed),DESIRED_THRUST_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&speed,sizeof(speed),DESIRED_THRUST_TID,NOW());
 }
 
 void MainWindow::on_pushButton_load_clicked(){
@@ -478,9 +499,7 @@ void MainWindow::on_pushButton_save_clicked(){
 void MainWindow::keyPressEvent(QKeyEvent *event){
     if(event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter){
         char button = 0;
-        char msg[100];
-        int length = gw.createNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW(),(char*) msg);
-        uart.write(msg, length);
+        gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
         ui->pushButton_start->setEnabled(true);
         ui->pushButton_stop->setEnabled(false);
     }
@@ -570,9 +589,7 @@ void MainWindow::sendSelectedTopics()
         }
     }
     ui->customPlot->replot();
-    char msg[256];
-    int length = gw.createNetworkMessage((char*)&topicIDs,topicIDs.numberOfBytesToSend(),TOPICS_TO_FORWARD_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&topicIDs,topicIDs.numberOfBytesToSend(),TOPICS_TO_FORWARD_TID,NOW());
 }
 
 int precnt = 0;
@@ -654,9 +671,7 @@ void MainWindow::on_pushButton_setRPY_clicked(){
     double pitch = ui->spinBox_desPitch->value() / 180. * M_PI;
     double yaw = ui->spinBox_desYaw->value() / 180. * M_PI;
     RODOS::YPR ypr(yaw,pitch,roll);
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&ypr,sizeof(ypr),DESIRED_YPR_TID,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&ypr,sizeof(ypr),DESIRED_YPR_TID,NOW());
 }
 
 void MainWindow::on_comboBox_currentIndexChanged(int index)
@@ -766,7 +781,10 @@ void MainWindow::on_setOPID_alt_clicked()
     altPID.outerLimit = ui->doubleSpinBox_outLimit_alt->value();
     altPID.omegaAlpha = ui->doubleSpinBox_filterW_alt->value();
     altPID.deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW_alt->value();
-    char msg[100];
-    int length = gw.createNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_ALT_VALUES_TID ,NOW(),(char*) msg);
-    uart.write(msg, length);
+    gw->sendNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_ALT_VALUES_TID ,NOW());
+}
+
+void MainWindow::on_actionConnect_triggered(bool checked)
+{
+    diag.exec();
 }
