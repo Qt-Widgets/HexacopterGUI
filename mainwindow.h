@@ -9,12 +9,14 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include "gateway-linux/api/gateway.h"
-#include "gateway-linux/api/hal.h"
+#include "gateway-qt/api/gateway.h"
+#include "gateway-qt/api/hal.h"
 
 #include "opticaltracking.h"
 #include <gpscontrol/gpstracking.h>
 #include "datatypes.h"
+
+#include "interfacedialog.h"
 
 static QString colorplate[] = {"aquamarine", "blue", "blueviolet", "brown", "cadetblue", "chartreuse",
                                "coral", "cornflowerblue", "crimson", "darkblue", "darkcyan",
@@ -46,6 +48,8 @@ public:
 public slots:
 //    void receive();
     void pollGateway();
+    void initGateway(bool serial, QStringList data);
+    void stopGateway(bool serial);
 
 signals:
     void imuChanged(float roll,float pitch,float yaw);
@@ -66,23 +70,28 @@ private slots:
     void selectionChanged();
     void sendSelectedTopics();
     void get_OT_Attitude(double roll, double pitch, double yaw);
-
     void on_pushButton_saveSelected_clicked();
     void on_pushButton_plot_clicked();
     void on_pushButton_setRPY_clicked();
-
     void on_comboBox_currentIndexChanged(int index);
-
     void on_pushButton_save_alt_clicked();
-
     void on_pushButton_load_alt_clicked();
-
     void on_setOPID_alt_clicked();
+    void on_actionConnect_triggered(bool checked);
 
 protected:
     void keyPressEvent(QKeyEvent* event);
 
 private:
+
+    HAL_UART_UDP *uart_udp;
+    LinkinterfaceUART_UDP *linkif_udp;
+    HAL_UART *uart;
+    LinkinterfaceUART *linkif;
+
+    Gateway *gw;
+
+    InterfaceDialog diag;
     void parse(QByteArray data);
     QTimer *timer;
     Ui::MainWindow *ui;

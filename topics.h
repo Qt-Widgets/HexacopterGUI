@@ -1,7 +1,7 @@
 #ifndef TOPICS_H
 #define TOPICS_H
 #define ACTIVE          217
-#include "gateway-linux/api/gateway/topiclistreport.h"
+#include "gateway-qt/api/gateway/topiclistreport.h"
 #include "typeinfo"
 #include "datatypes.h"
 #include "matlib.h"
