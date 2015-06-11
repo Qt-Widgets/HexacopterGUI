@@ -397,16 +397,18 @@ void Copter::buildGeometry(int divisions, qreal scale)
     QColor green = QColor::fromRgb(34,139,34);
     QColor orange = QColor::fromRgb(255,140,0);
 
-    parts << arm2.parts << arm4.parts << arm6.parts << rot2.parts << rot4.parts << rot6.parts;
+    parts << arm1.parts << arm3.parts << arm5.parts << rot1.parts << rot3.parts << rot5.parts;
 
     for (int i = 0; i < parts.count(); ++i)
         qSetColor(parts[i]->faceColor, gray);
+
     int last = parts.count();
-    parts << arm1.parts << rot1.parts;
+    parts << arm4.parts << rot2.parts;
     for (int i = last; i < parts.count(); ++i)
         qSetColor(parts[i]->faceColor, orange);
     last = parts.count();
-    parts << arm3.parts << arm5.parts << rot3.parts << rot5.parts ;
+
+    parts << arm2.parts << arm6.parts << rot4.parts << rot6.parts ;
     for (int i = last; i < parts.count(); ++i)
         qSetColor(parts[i]->faceColor, green);
 

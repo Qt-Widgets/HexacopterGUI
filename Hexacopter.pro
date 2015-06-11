@@ -20,8 +20,6 @@ SOURCES += main.cpp\
         qcustomplot/qcustomplot.cpp \
         myitem.cpp \
         opticaltracking.cpp \
-        gpscontrol/gpscoordinate.cpp \
-        gpscontrol/gpstracking.cpp \
         gateway-qt/src/independent/checksumes.cpp \
         gateway-qt/src/independent/gateway.cpp \
         gateway-qt/src/independent/linkinterfaceuart.cpp \
@@ -30,8 +28,13 @@ SOURCES += main.cpp\
         gateway-qt/src/independent/stream-bytesex.cpp \
         gateway-qt/src/qt/hal/hal_uart.cpp \
         gateway-qt/src/qt/hal/hal_uart_udp.cpp \
-    gateway-qt/src/qt/hal/hw_hal_uart_udp.cpp \
-    interfacedialog.cpp
+        gateway-qt/src/qt/hal/hw_hal_uart_udp.cpp \
+        interfacedialog.cpp \
+    worldmagneticmodel.cpp \
+    magnetic/Geomagnetism.cpp \
+    Mapplot/mapplot.cpp \
+    Mapplot/copter2d.cpp \
+    Mapplot/ship.cpp
 
 HEADERS += mainwindow.h \
         copter.h \
@@ -43,8 +46,6 @@ HEADERS += mainwindow.h \
         topics.h \
         myitem.h \
         opticaltracking.h \
-        gpscontrol/gpscoordinate.h \
-        gpscontrol/gpstracking.h \
         gateway-qt/api/gateway/gateway.h \
         gateway-qt/api/gateway/linkinterface.h \
         gateway-qt/api/gateway/linkinterfaceuart.h \
@@ -62,15 +63,23 @@ HEADERS += mainwindow.h \
         gateway-qt/api/stream-bytesex.h \
         gateway-qt/api/gateway/topiclistreport.h \
     gateway-qt/api/hal/hw_hal_uart_udp.h \
-    interfacedialog.h
+    interfacedialog.h \
+    worldmagneticmodel.h \
+    magnetic/Geomagnetism.h \
+    magnetic/EGM9615.h \
+    Mapplot/mapplot.h \
+    Mapplot/copter2d.h \
+    Mapplot/ship.h
 
 FORMS   += mainwindow.ui \
     interfacedialog.ui
 
-LIBS += -L/usr/local/lib -lvrpn -lquat -pthread
+LIBS += -L/usr/local/lib -lvrpn -lquat -pthread -lm
 
-RESOURCES += gpscontrol/gps.qrc \
-            img/img.qrc
+RESOURCES += img/img.qrc
 
 OTHER_FILES += gpscontrol/gTracking.html \
                gpscontrol/gTracking.js
+
+INCLUDEPATH += /usr/local/include/opencv2
+LIBS += -L/usr/local/lib -lopencv_core -lopencv_imgproc -lopencv_highgui -lopencv_objdetect -lopencv_calib3d -lopencv_videoio

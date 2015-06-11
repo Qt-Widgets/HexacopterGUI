@@ -6,6 +6,10 @@
 #include "datatypes.h"
 #include "matlib.h"
 
+
+//#define LIMITED_DATA_RATE
+
+
 #define OFFSET                      3000
 #define ATTITUDE_TID                (1031 + OFFSET)
 #define STATE_TID                   (1033 + OFFSET)
@@ -30,6 +34,11 @@ struct Topic{
     int data_length;
 };
 
+#ifdef LIMITED_DATA_RATE
+Topic myTopics[] = {
+                    {1070 + OFFSET, "System State", "q0,q1,q2,q3,wx,wy,wz,lat,lon,HeightGPS,HeightMSL,NEDX,NEDY,NEDZ,velNEDX,velNEDy,velNEDZ,Voltage,Percent,AccX,AccY,AccZ,GyroX,GyroY,GyroZ,MagX,MagY,MagZ,HeightB,SpeedB,PressureB,TemperatureB,HeightL,SpeedL,HeightS,SpeedS", sizeof(System_State_t) / sizeof(float) + sizeof(System_State_t) % sizeof(float)},      // Special case!
+                   };
+#else
 Topic myTopics[] = {
                     {1031 + OFFSET, "Attitude", "q0,q1,q2,q3,wx,wy,wz,roll,pitch,yaw", sizeof(Attitude_t) / sizeof(double)},      // Special case!
                     {1032 + OFFSET, "Altitude", "r_height,r_speed,a_height,a_speed", sizeof(Altitude_t) / sizeof(double)},
@@ -39,7 +48,7 @@ Topic myTopics[] = {
                     {1005 + OFFSET, "Lidar", "Height_LiDar,Speed_LiDar,Raw", sizeof(Sensor_Lidar_t) / sizeof(double)},
                     {1009 + OFFSET, "SRF02", "Height_SRF02", sizeof(Sensor_Proximity_t) / sizeof(double)},
                     {1010 + OFFSET, "Battery", "Voltage,Percent", sizeof(Sensor_Voltage_t) / sizeof(double)},                             // Special case!
-//                    {1006 + OFFSET, "GPS Data", "iTow, lat, lon, height, hMSL, NEDx, NEDy, NEDz, velNEDx, velNEDy, velNEDz, speed, gSpeed, heading, pAcc, sAcc, cAcc", sizeof(Gps_data_t) / sizeof(double)},
+                    {1006 + OFFSET, "GPS Data", "iTow, lat, lon, height, hMSL, NEDx, NEDy, NEDz, velNEDx, velNEDy, velNEDz, speed, gSpeed, heading, pAcc, sAcc, cAcc", sizeof(Sensor_GPS_t) / sizeof(double)},
                     {2001 + OFFSET, "Engine", "ARMED", sizeof(double) / sizeof(double)},
 
                     {2002 + OFFSET, "Remote YPR", "yaw_set,pitch_set,roll_set", sizeof(RODOS::Vector3D) / sizeof(double)},
@@ -57,4 +66,5 @@ Topic myTopics[] = {
                     {OT_TID,        "Optical tracking", "roll_ot,pitch_ot,yaw_ot", sizeof(RODOS::Vector3D) / sizeof(double)}       // Special case!
                    };
 
+#endif // LIMITED_DATA_RATE
 #endif // TOPICS_H

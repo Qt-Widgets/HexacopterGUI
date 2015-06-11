@@ -99,4 +99,45 @@ typedef enum Flight_states_e : char{
     MOTOR_OFF = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING
 } Flight_states_t;
 
+
+////////////////////////////////////////////////////////////////////////////
+// Short topics for low data rates
+
+typedef struct{
+    float x,y,z;
+} Vector3Df_t;
+
+typedef struct{
+    float q0;
+    Vector3Df_t q;
+} Quaternionf_t;
+
+typedef struct{
+    float height, speed;
+} Proximityf_t;
+
+typedef struct{
+    float height, speed, pressure, temp;
+} Barometricf_t;
+
+typedef struct {
+    float lat, lon;
+    float height, hMSL;
+    Vector3Df_t NED;
+    Vector3Df_t velNED;
+} GPS_small_t;
+
+typedef struct {
+    Flight_states_t state;
+    Quaternionf_t quat;
+    GPS_small_t gps;
+    Vector3Df_t accel;
+    Vector3Df_t gyro;
+    Vector3Df_t mag;
+    float voltage;
+    Barometricf_t baro;
+    Proximityf_t lidar;
+    Proximityf_t sonic;
+} System_State_t;
+
 #endif /* DATATYPES_H_ */

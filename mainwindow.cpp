@@ -8,7 +8,6 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QListWidgetItem>
-
 #include <QSerialPort>
 
 #include "datatypes.h"
@@ -51,6 +50,18 @@ MainWindow::MainWindow(QWidget *parent) :
     diag()
 {
 
+    cv::String s = "/dev/video0";
+    capVideo.open(0 + CV_CAP_V4L);
+
+    if(!capVideo.isOpened()){
+        qDebug() << "Could not open " << s.c_str();
+    }
+
+    tmrCam = new QTimer(this);
+    connect(tmrCam, SIGNAL(timeout()), this, SLOT(processFrame()));
+    tmrCam->start(1000./30.);
+
+    gw = NULL;
     ui->setupUi(this);
 
     uart_udp = new HAL_UART_UDP;
@@ -94,8 +105,6 @@ MainWindow::MainWindow(QWidget *parent) :
 
     lastIndex = ui->comboBox->currentIndex();
 
-    gpsTracking = new GPSTracking(ui);
-    connect(this, SIGNAL(gpsLLH(double,double,double)), gpsTracking, SLOT(frameGPSRecieved(double,double,double)));
 #ifdef OT
     ot = new OpticalTracking(this);
     ot->start();
@@ -156,6 +165,16 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(this, SIGNAL(imuChanged(float,float,float)), glWidget, SLOT(setEuler(float,float,float)));
     qDebug() << "init done";
 
+    videoLayoutBig = new QGridLayout();
+    smallLayout = new QGridLayout();
+    mapLayoutBig = new QGridLayout();
+    ui->widget_video->setLayout(videoLayoutBig);
+    ui->widget_small->setLayout(smallLayout);
+    videoView = new QLabel();
+
+    map = new Mapplot();
+    ui->widget_gps->setLayout(mapLayoutBig);
+    mapLayoutBig->addWidget(map);
 }
 
 
@@ -177,180 +196,19 @@ Sensor_Voltage_t* battery;
 Flight_states_t* state;
 
 bool MainWindow::putGeneric(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo){
-    double *data = (double *)msg;
 
-//    qDebug() << topicId;
-    long alive = topicId;
-    char dat[100];
-//    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) dat);
-//    uart.write(dat, length);
-
-    if(topicId == BAT_TID){
-
-        battery = (Sensor_Voltage_t*) msg;
-
-        // Battery Color
-        QString myStyleSheet =
-                "QProgressBar {"
-                "border: 2px solid grey;"
-                "border-radius: 5px;"
-                "text-align: center;"
-                "}"
-
-                "QProgressBar::chunk {"
-                "background-color:";
-        if(battery->percent < 0.3)
-            myStyleSheet.append(" red;");
-        else if(battery->percent < 0.65)
-            myStyleSheet.append(" orange;");
-        else
-            myStyleSheet.append(" Lime;");
-
-
-        myStyleSheet.append("margin: 0.5px;"
-                            "width: 10px"
-                            " }");
-
-        ui->batteryStatus->setStyleSheet(myStyleSheet);
-        ui->batteryStatus->setValue(battery->percent * 100);
-
-    }
-
-    if(topicId == STATE_TID){
-         state = (Flight_states_t*) msg;
-//        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
-
-        switch (*state) {
-        case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
-            ui->flight_state->setText("MOTOR OFF");
-            break;
-        case ARMED:
-            ui->flight_state->setText("ARMED");
-            break;
-        case TAKE_OFF:
-            ui->flight_state->setText("TAKE OFF");
-            break;
-        case ALTITUDE_HOLD:
-            ui->flight_state->setText("ALTITUDE HOLD");
-            break;
-        case MANUAL_FLIGHT:
-            ui->flight_state->setText("MANUAL FLIGHT");
-            break;
-        case LANDING:
-            ui->flight_state->setText("LANDING");
-            break;
-        default:
-            break;
-        }
-    }
-
-    if(topicId == ATTITUDE_TID){
-        attitude_state = (Attitude_t*) msg;
-        ypr = attitude_state->q.toYPR();
-    } else if (ui->tabWidget_2->currentIndex() == 0){
-        return false;
-    }
-
-    if(topicId == GPS_TID){
-        gps = (Sensor_GPS_t*) msg;
-        emit gpsLLH(gps->lat, gps->lon, gps->height);
-    }
-
-
-
-    double time = QTime::currentTime().msecsSinceStartOfDay() / 1000. - start;
-    if(!windowOpen){
-
-        if(ui->tabWidget_2->currentIndex() == 0){
-            emit imuChanged(ypr.roll * 180 / M_PI, ypr.pitch  * 180 / M_PI, (ypr.yaw  * 180 / M_PI) - MY_NORTH);
-            ui->q0->display(attitude_state->q.q0);
-            ui->q1->display(attitude_state->q.q.x);
-            ui->q2->display(attitude_state->q.q.y);
-            ui->q3->display(attitude_state->q.q.z);
-            ui->roll->display(ypr.roll * 180 / M_PI);
-            ui->pitch->display(ypr.pitch * 180 / M_PI);
-            ui->yaw->display(ypr.yaw * 180 / M_PI);
-            ui->wroll->display(attitude_state->w.x);
-            ui->wpitch->display(attitude_state->w.y);
-            ui->wyaw->display(attitude_state->w.z);
-        } else {
-            // For all available topics
-            for(int i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
-                // check if received topic ID is valid
-                if(topicId == myTopics[i].id){
-
-                    // select TopicItem from List
-                    TopicItem* topicItem = (TopicItem*) ui->listWidget_Topics->item(i);
-                    int itemCnt = topicItem->size();
-
-                    // for each field of the TopicItem
-                    for(int j = 0; j < itemCnt; j++){
-
-                        // check if the checkbox is checked
-                        int graphID = topicItem->fields.at(j)->graphID;
-
-                        if(topicItem->fields.at(j)->checkState() == Qt::Checked){
-                            // if the color of the PlotItem is white, it wasn't checked before
-                            if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") == 0){
-                                QColor mycolor(colorplate[qrand() % 58]);
-                                ui->listWidget->item(graphID)->setBackgroundColor(mycolor);
-                                ui->customPlot->graph(graphID)->setPen(QPen(mycolor));
-                                ui->customPlot->graph(graphID)->addToLegend();
-                            }
-                            if(topicId == ATTITUDE_TID && j > 6){
-                                switch (j) {
-                                case 7:
-                                    ui->customPlot->graph(graphID)->addData(time, ypr.roll * 180 / M_PI);
-                                    break;
-                                case 8:
-                                    ui->customPlot->graph(graphID)->addData(time, ypr.pitch * 180 / M_PI);
-                                    break;
-                                case 9:
-                                    ui->customPlot->graph(graphID)->addData(time, ypr.yaw * 180 / M_PI);
-                                    break;
-                                }
-                            } else if(topicId == DESIRED_YPR_TID + OFFSET){
-                                ui->customPlot->graph(graphID)->addData(time, data[j]*180/M_PI);
-                            } else {
-                                ui->customPlot->graph(graphID)->addData(time, data[j]);
-                            }
-                            ui->customPlot->graph(graphID)->setVisible(true);
-                        } else {
-                            if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") != 0){
-                                ui->customPlot->graph(graphID)->setVisible(false);
-                                ui->customPlot->graph(graphID)->removeFromLegend();
-                                ui->listWidget->item(graphID)->setBackgroundColor(QColor("white"));
-                                ui->customPlot->graph(graphID)->setPen(QPen(QColor("black")));
-                            }
-                        }
-                    }
-                    // Euler special case + GUI
-                    ui->customPlot->replot();
-                }
-            }
-            if(ui->checkBox_tolerance->isChecked()){
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setVisible(true);
-                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setVisible(true);
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setPen(QPen(Qt::red));
-                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setPen(QPen(Qt::red));
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setBrush(QBrush(QColor(240, 255, 200, 100)));
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setChannelFillGraph(ui->customPlot->graph(ui->customPlot->graphCount()-1));
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->addData(time, 2);
-                ui->customPlot->graph(ui->customPlot->graphCount()-1)->addData(time, -2);
-            } else {
-                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setVisible(false);
-                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setVisible(false);
-            }
-        }
-    }
-
+#ifdef LIMITED_DATA_RATE
+    parseTopicLimitedData(topicId, len, msg, netMsgInfo);
+#else
+    parseTopicData(topicId, len, msg, netMsgInfo);
+#endif
     return true;
 }
 
 void MainWindow::pollGateway(){
 
     if(!ui->checkBox_stop->isChecked()){
-        ui->customPlot->xAxis->moveRange(0.015);
+        ui->customPlot->xAxis->moveRange(0.02);
         ui->customPlot->replot();
     }    
     gw->pollMessages();
@@ -387,19 +245,22 @@ void MainWindow::stopGateway(bool serial)
 void MainWindow::on_setOPID_clicked(){
     int idx = ui->comboBox->currentIndex();
     on_comboBox_currentIndexChanged(idx);
-    gw->sendNetworkMessage((char*)&rpy[idx],sizeof(rpy[idx]),SET_PID_VALUES_TID + idx,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&rpy[idx],sizeof(rpy[idx]),SET_PID_VALUES_TID + idx,NOW());
 }
 
 void MainWindow::on_pushButton_start_clicked(){
     double button = ACTIVE;
-    gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
     ui->pushButton_start->setEnabled(false);
     ui->pushButton_stop->setEnabled(true);
 }
 
 void MainWindow::on_pushButton_stop_clicked(){
     double button = 0;
-    gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
     ui->pushButton_start->setEnabled(true);
     ui->pushButton_stop->setEnabled(false);
 }
@@ -408,7 +269,8 @@ void MainWindow::on_pushButton_speed_clicked()
 {
     double speed = (double) ui->speed->value();
     gas = ui->speed->value();
-    gw->sendNetworkMessage((char*)&speed,sizeof(speed),DESIRED_THRUST_TID,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&speed,sizeof(speed),DESIRED_THRUST_TID,NOW());
 }
 
 void MainWindow::on_pushButton_load_clicked(){
@@ -499,10 +361,237 @@ void MainWindow::on_pushButton_save_clicked(){
 void MainWindow::keyPressEvent(QKeyEvent *event){
     if(event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter){
         char button = 0;
-        gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
+        if(gw != NULL)
+            gw->sendNetworkMessage((char*)&button,sizeof(button),ENGINE_CTRL_TID,NOW());
         ui->pushButton_start->setEnabled(true);
         ui->pushButton_stop->setEnabled(false);
     }
+}
+
+void MainWindow::parseTopicData(const long topicId, const unsigned int len, const void *msg, const NetMsgInfo &netMsgInfo) {
+    double *data = (double *)msg;
+
+//    qDebug() << topicId;
+    long alive = topicId;
+    char dat[100];
+//    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) dat);
+//    uart.write(dat, length);
+
+    if(topicId == BAT_TID){
+
+        battery = (Sensor_Voltage_t*) msg;
+
+        // Battery Color
+        QString myStyleSheet =
+                "QProgressBar {"
+                "border: 2px solid grey;"
+                "border-radius: 5px;"
+                "text-align: center;"
+                "}"
+
+                "QProgressBar::chunk {"
+                "background-color:";
+        if(battery->percent < 0.3)
+            myStyleSheet.append(" red;");
+        else if(battery->percent < 0.65)
+            myStyleSheet.append(" orange;");
+        else
+            myStyleSheet.append(" Lime;");
+
+
+        myStyleSheet.append("margin: 0.5px;"
+                            "width: 10px"
+                            " }");
+
+        ui->batteryStatus->setStyleSheet(myStyleSheet);
+        ui->batteryStatus->setValue(battery->percent * 100);
+
+    }
+
+    if(topicId == STATE_TID){
+         state = (Flight_states_t*) msg;
+//        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
+
+        switch (*state) {
+        case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
+            ui->flight_state->setText("MOTOR OFF");
+            break;
+        case ARMED:
+            ui->flight_state->setText("ARMED");
+            break;
+        case TAKE_OFF:
+            ui->flight_state->setText("TAKE OFF");
+            break;
+        case ALTITUDE_HOLD:
+            ui->flight_state->setText("ALTITUDE HOLD");
+            break;
+        case MANUAL_FLIGHT:
+            ui->flight_state->setText("MANUAL FLIGHT");
+            break;
+        case LANDING:
+            ui->flight_state->setText("LANDING");
+            break;
+        default:
+            break;
+        }
+    }
+
+    if(topicId == ATTITUDE_TID){
+        attitude_state = (Attitude_t*) msg;
+        ypr = attitude_state->q.toYPR();
+    } else if (ui->tabWidget_2->currentIndex() == 0){
+        return;
+    }
+
+    if(topicId == GPS_TID){
+        gps = (Sensor_GPS_t*) msg;
+        map->moveDrone(gps->NED.y, gps->NED.x);
+    }
+
+
+
+    double time = QTime::currentTime().msecsSinceStartOfDay() / 1000. - start;
+    if(!windowOpen){
+
+        if(ui->tabWidget_2->currentIndex() == 0){
+            emit imuChanged(ypr.roll * 180 / M_PI, ypr.pitch  * 180 / M_PI, (ypr.yaw  * 180 / M_PI) - MY_NORTH);
+            ui->q0->display(attitude_state->q.q0);
+            ui->q1->display(attitude_state->q.q.x);
+            ui->q2->display(attitude_state->q.q.y);
+            ui->q3->display(attitude_state->q.q.z);
+            ui->roll->display(ypr.roll * 180 / M_PI);
+            ui->pitch->display(ypr.pitch * 180 / M_PI);
+            ui->yaw->display(ypr.yaw * 180 / M_PI);
+            ui->wroll->display(attitude_state->w.x);
+            ui->wpitch->display(attitude_state->w.y);
+            ui->wyaw->display(attitude_state->w.z);
+        } else {
+            // For all available topics
+            for(int i = 0; i < sizeof(myTopics) / sizeof(Topic); i++){
+                // check if received topic ID is valid
+                if(topicId == myTopics[i].id){
+
+                    // select TopicItem from List
+                    TopicItem* topicItem = (TopicItem*) ui->listWidget_Topics->item(i);
+                    int itemCnt = topicItem->size();
+
+                    // for each field of the TopicItem
+                    for(int j = 0; j < itemCnt; j++){
+
+                        // check if the checkbox is checked
+                        int graphID = topicItem->fields.at(j)->graphID;
+
+                        if(topicItem->fields.at(j)->checkState() == Qt::Checked){
+                            // if the color of the PlotItem is white, it wasn't checked before
+                            if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") == 0){
+                                QColor mycolor(colorplate[qrand() % 58]);
+                                ui->listWidget->item(graphID)->setBackgroundColor(mycolor);
+                                ui->customPlot->graph(graphID)->setPen(QPen(mycolor));
+                                ui->customPlot->graph(graphID)->addToLegend();
+                            }
+                            if(topicId == ATTITUDE_TID && j > 6){
+                                switch (j) {
+                                case 7:
+                                    ui->customPlot->graph(graphID)->addData(time, ypr.roll * 180 / M_PI);
+                                    break;
+                                case 8:
+                                    ui->customPlot->graph(graphID)->addData(time, ypr.pitch * 180 / M_PI);
+                                    break;
+                                case 9:
+                                    ui->customPlot->graph(graphID)->addData(time, ypr.yaw * 180 / M_PI);
+                                    break;
+                                }
+                            } else if(topicId == DESIRED_YPR_TID + OFFSET){
+                                ui->customPlot->graph(graphID)->addData(time, data[j]*180/M_PI);
+                            } else {
+                                ui->customPlot->graph(graphID)->addData(time, data[j]);
+                            }
+                            ui->customPlot->graph(graphID)->setVisible(true);
+                        } else {
+                            if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") != 0){
+                                ui->customPlot->graph(graphID)->setVisible(false);
+                                ui->customPlot->graph(graphID)->removeFromLegend();
+                                ui->listWidget->item(graphID)->setBackgroundColor(QColor("white"));
+                                ui->customPlot->graph(graphID)->setPen(QPen(QColor("black")));
+                            }
+                        }
+                    }
+                    // Euler special case + GUI
+                    ui->customPlot->replot();
+                }
+            }
+            if(ui->checkBox_tolerance->isChecked()){
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setVisible(true);
+                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setVisible(true);
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setPen(QPen(Qt::red));
+                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setPen(QPen(Qt::red));
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setBrush(QBrush(QColor(240, 255, 200, 100)));
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setChannelFillGraph(ui->customPlot->graph(ui->customPlot->graphCount()-1));
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->addData(time, 2);
+                ui->customPlot->graph(ui->customPlot->graphCount()-1)->addData(time, -2);
+            } else {
+                ui->customPlot->graph(ui->customPlot->graphCount()-2)->setVisible(false);
+                ui->customPlot->graph(ui->customPlot->graphCount()-1)->setVisible(false);
+            }
+        }
+    }
+
+}
+
+void MainWindow::parseTopicLimitedData(const long topicId, const unsigned int len, const void *msg, const NetMsgInfo &netMsgInfo)
+{
+    qDebug() << "TopicID" << topicId;
+
+
+    System_State_t *state;
+    double time = QTime::currentTime().msecsSinceStartOfDay() / 1000. - start;
+
+    if(topicId == myTopics[0].id){
+
+        float *data = (float *)msg + 1;
+
+        state = (System_State_t*) msg;
+        Quaternion q;
+        q.q0 = state->quat.q0;
+        q.q.x = state->quat.q.x;
+        q.q.y = state->quat.q.y;
+        q.q.z = state->quat.q.z;
+        YPR ypr = q.toYPR();
+
+        // select TopicItem from List
+        TopicItem* topicItem = (TopicItem*) ui->listWidget_Topics->item(0);
+        int itemCnt = topicItem->size();
+
+        // for each field of the TopicItem
+        for(int j = 0; j < itemCnt; j++){
+
+            // check if the checkbox is checked
+            int graphID = topicItem->fields.at(j)->graphID;
+
+            if(topicItem->fields.at(j)->checkState() == Qt::Checked){
+                // if the color of the PlotItem is white, it wasn't checked before
+                if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") == 0){
+                    QColor mycolor(colorplate[qrand() % 58]);
+                    ui->listWidget->item(graphID)->setBackgroundColor(mycolor);
+                    ui->customPlot->graph(graphID)->setPen(QPen(mycolor));
+                    ui->customPlot->graph(graphID)->addToLegend();
+                }
+                ui->customPlot->graph(graphID)->addData(time, data[j]);
+                ui->customPlot->graph(graphID)->setVisible(true);
+            } else {
+                if(ui->listWidget->item(graphID)->backgroundColor().name().compare("#ffffff") != 0){
+                    ui->customPlot->graph(graphID)->setVisible(false);
+                    ui->customPlot->graph(graphID)->removeFromLegend();
+                    ui->listWidget->item(graphID)->setBackgroundColor(QColor("white"));
+                    ui->customPlot->graph(graphID)->setPen(QPen(QColor("black")));
+                }
+            }
+        }
+        // Euler special case + GUI
+        ui->customPlot->replot();
+    }
+
+
 }
 
 
@@ -589,7 +678,8 @@ void MainWindow::sendSelectedTopics()
         }
     }
     ui->customPlot->replot();
-    gw->sendNetworkMessage((char*)&topicIDs,topicIDs.numberOfBytesToSend(),TOPICS_TO_FORWARD_TID,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&topicIDs,topicIDs.numberOfBytesToSend(),TOPICS_TO_FORWARD_TID,NOW());
 }
 
 int precnt = 0;
@@ -671,7 +761,8 @@ void MainWindow::on_pushButton_setRPY_clicked(){
     double pitch = ui->spinBox_desPitch->value() / 180. * M_PI;
     double yaw = ui->spinBox_desYaw->value() / 180. * M_PI;
     RODOS::YPR ypr(yaw,pitch,roll);
-    gw->sendNetworkMessage((char*)&ypr,sizeof(ypr),DESIRED_YPR_TID,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&ypr,sizeof(ypr),DESIRED_YPR_TID,NOW());
 }
 
 void MainWindow::on_comboBox_currentIndexChanged(int index)
@@ -781,10 +872,51 @@ void MainWindow::on_setOPID_alt_clicked()
     altPID.outerLimit = ui->doubleSpinBox_outLimit_alt->value();
     altPID.omegaAlpha = ui->doubleSpinBox_filterW_alt->value();
     altPID.deltaOmegaAlpha = ui->doubleSpinBox_filterDeltaW_alt->value();
-    gw->sendNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_ALT_VALUES_TID ,NOW());
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_ALT_VALUES_TID ,NOW());
 }
 
 void MainWindow::on_actionConnect_triggered(bool checked)
 {
     diag.exec();
 }
+
+void MainWindow::processFrame(){
+    capVideo.read(frame);
+    if(frame.empty()){
+        qDebug() << "Empty Frame";
+        return;
+    }
+
+    cv::cvtColor(frame, frame, CV_BGR2RGB);
+    cv::resize(frame, frame, cv::Size(360,240));
+    QImage img((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_RGB888);
+
+    if(ui->tabWidget_2->currentIndex() == 2){
+        // Show big time
+//        if(!videoLayoutBig->isEmpty())
+            videoLayoutBig->removeWidget(videoView);
+        if(!smallLayout->isEmpty()) {
+            smallLayout->removeWidget(videoView);
+            smallLayout->addWidget(map);
+            mapLayoutBig->removeWidget(map);
+        }
+        videoLayoutBig->addWidget(videoView);
+        videoView->setPixmap(QPixmap::fromImage(img));
+        videoView->setScaledContents(true);
+    } else {
+        // Show small time
+        if(!videoLayoutBig->isEmpty())
+            videoLayoutBig->removeWidget(videoView);
+        if(!smallLayout->isEmpty()){
+            smallLayout->removeWidget(videoView);
+            smallLayout->removeWidget(map);
+            mapLayoutBig->addWidget(map);
+        }
+        smallLayout->addWidget(videoView);
+        videoView->setPixmap(QPixmap::fromImage(img));
+        videoView->setScaledContents(true);
+    }
+//    ui->video->setPixmap(QPixmap::fromImage(img));
+}
+

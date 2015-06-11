@@ -255,10 +255,10 @@ void Gateway::pollMessages() {
                         if(realMsgSize == (int32_t)networkInMessage.numberOfBytesToSend()) {
                             AnalyseAndDistributeMessagesFromNetwork();
                         } else {
-//                            qDebug() <<"Message dropped because expected size(" << networkInMessage.numberOfBytesToSend() << " ) != real size(" << realMsgSize << ")";
+                            qDebug() <<"Message dropped because expected size(" << networkInMessage.numberOfBytesToSend() << " ) != real size(" << realMsgSize << ")";
                         }
                     } else {
-//                        qDebug() << "Message dropped because received is even smaller than the header";
+                        qDebug() << "Message dropped because received is even smaller than the header";
                     }
                 }
 

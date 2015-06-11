@@ -13,10 +13,15 @@
 #include "gateway-qt/api/hal.h"
 
 #include "opticaltracking.h"
-#include <gpscontrol/gpstracking.h>
 #include "datatypes.h"
 
 #include "interfacedialog.h"
+
+#include "opencv2/core.hpp"
+#include "opencv2/highgui.hpp"
+#include "opencv2/imgproc.hpp"
+
+#include "Mapplot/mapplot.h"
 
 static QString colorplate[] = {"aquamarine", "blue", "blueviolet", "brown", "cadetblue", "chartreuse",
                                "coral", "cornflowerblue", "crimson", "darkblue", "darkcyan",
@@ -54,6 +59,7 @@ public slots:
 signals:
     void imuChanged(float roll,float pitch,float yaw);
     void gpsLLH(double lat, double lon, double height);
+    void gpsNED(double east, double north);
 
 private slots:
     void on_setOPID_clicked();
@@ -78,11 +84,15 @@ private slots:
     void on_pushButton_load_alt_clicked();
     void on_setOPID_alt_clicked();
     void on_actionConnect_triggered(bool checked);
+    void processFrame();
 
 protected:
     void keyPressEvent(QKeyEvent* event);
 
 private:
+
+    void parseTopicData(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo);
+    void parseTopicLimitedData(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo);
 
     HAL_UART_UDP *uart_udp;
     LinkinterfaceUART_UDP *linkif_udp;
@@ -90,6 +100,10 @@ private:
     LinkinterfaceUART *linkif;
 
     Gateway *gw;
+
+    cv::VideoCapture capVideo;
+    cv::Mat frame;
+    QTimer* tmrCam;
 
     InterfaceDialog diag;
     void parse(QByteArray data);
@@ -102,9 +116,13 @@ private:
     double start, lastTime;
     int cntSelectedTopics;
     OpticalTracking *ot;
-    GPSTracking *gpsTracking;
     PID_values_t rpy[3];
     int lastIndex;
+
+    QGridLayout *videoLayoutBig, *smallLayout, *mapLayoutBig;
+    QLabel *videoView;
+
+    Mapplot *map;
 };
 
 #endif // MAINWINDOW_H
