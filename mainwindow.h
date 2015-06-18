@@ -16,6 +16,7 @@
 #include "datatypes.h"
 
 #include "interfacedialog.h"
+#include "cameradialog.h"
 
 #include "opencv2/core.hpp"
 #include "opencv2/highgui.hpp"
@@ -55,6 +56,8 @@ public slots:
     void pollGateway();
     void initGateway(bool serial, QStringList data);
     void stopGateway(bool serial);
+    void openDev(int i);
+    void closeDev();
 
 signals:
     void imuChanged(float roll,float pitch,float yaw);
@@ -86,6 +89,10 @@ private slots:
     void on_actionConnect_triggered(bool checked);
     void processFrame();
 
+    void on_actionCamera_triggered();
+
+    void on_checkBox_oculus_clicked(bool checked);
+
 protected:
     void keyPressEvent(QKeyEvent* event);
 
@@ -106,10 +113,17 @@ private:
     QTimer* tmrCam;
 
     InterfaceDialog diag;
+    cameradialog camdiag;
     void parse(QByteArray data);
     QTimer *timer;
     Ui::MainWindow *ui;
     GLWidget *glWidget;
+
+    QWidget oculus;
+    QLabel left, right;
+    QHBoxLayout oculusLayout;
+    bool oculusActive;
+
     QByteArray message;
     bool ff;
     bool gettingMessage;

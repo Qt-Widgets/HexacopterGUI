@@ -18,12 +18,14 @@ class Copter2D : public QCPCurve
     void trackPath();
 public:
     explicit Copter2D(QCPAxis *keyAxis, QCPAxis *valueAxis, double heading = 0, QObject *parent = 0);
-    void setHeading(double angle);
+
     void rotate(double angle);
     void translate(double x, double y);
     void scaleArmSize(double newArm);
+
 public slots:
     void scale(QCPRange range);
+    void setHeading(double angle);
 };
 
 #endif // COPTER2D_H

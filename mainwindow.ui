@@ -30,7 +30,7 @@
           </sizepolicy>
          </property>
          <property name="currentIndex">
-          <number>0</number>
+          <number>2</number>
          </property>
          <widget class="QWidget" name="tab_4">
           <attribute name="title">
@@ -283,6 +283,13 @@
            <string>Video</string>
           </attribute>
           <layout class="QVBoxLayout" name="verticalLayout_10">
+           <item>
+            <widget class="QCheckBox" name="checkBox_oculus">
+             <property name="text">
+              <string>Oculus Rift SDK 2</string>
+             </property>
+            </widget>
+           </item>
            <item>
             <widget class="QWidget" name="widget_video" native="true"/>
            </item>
@@ -1454,6 +1461,7 @@
      <string>Edit</string>
     </property>
     <addaction name="actionConnect"/>
+    <addaction name="actionCamera"/>
    </widget>
    <widget class="QMenu" name="menuAbout">
     <property name="title">
@@ -1467,15 +1475,23 @@
   <widget class="QStatusBar" name="statusBar"/>
   <action name="actionConnect">
    <property name="text">
-    <string>Connect</string>
+    <string>Serial</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+C</string>
+    <string>Ctrl+S</string>
    </property>
   </action>
   <action name="actionHexacopter">
    <property name="text">
     <string>Hexacopter</string>
+   </property>
+  </action>
+  <action name="actionCamera">
+   <property name="text">
+    <string>Camera</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+C</string>
    </property>
   </action>
  </widget>

@@ -29,3 +29,4 @@ void Mapplot::moveDrone(double x, double y)
     copterY = y;
     this->replot();
 }
+

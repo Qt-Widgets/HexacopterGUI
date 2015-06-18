@@ -47,22 +47,41 @@ MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
     Putter(),
-    diag()
+    diag(),
+    camdiag(),
+    oculus(),
+    oculusLayout(),
+    left(),
+    right()
 {
+    ui->setupUi(this);
 
-    cv::String s = "/dev/video0";
-    capVideo.open(0 + CV_CAP_V4L);
+    if(QApplication::screens().size() > 1){
+        QScreen* screen = QApplication::screens().at(1);
+        QRect screenres = screen->geometry();
+        oculus.move(QPoint(screenres.x(), screenres.y()));
+        oculus.resize(screenres.width(), screenres.height());
+        oculus.setLayout(&oculusLayout);
+        oculusLayout.addWidget(&left);
+        oculusLayout.addWidget(&right);
 
-    if(!capVideo.isOpened()){
-        qDebug() << "Could not open " << s.c_str();
+        QPalette palette = oculus.palette();
+        palette.setColor(oculus.backgroundRole(), Qt::black);
+        palette.setColor(oculus.backgroundRole(), Qt::black);
+        oculus.setPalette(palette);
+
+    } else {
+        ui->checkBox_oculus->setEnabled(false);
+        qDebug() << "No oculus attached";
     }
+
 
     tmrCam = new QTimer(this);
     connect(tmrCam, SIGNAL(timeout()), this, SLOT(processFrame()));
     tmrCam->start(1000./30.);
 
     gw = NULL;
-    ui->setupUi(this);
+
 
     uart_udp = new HAL_UART_UDP;
     linkif_udp = new LinkinterfaceUART_UDP(uart_udp);
@@ -71,6 +90,9 @@ MainWindow::MainWindow(QWidget *parent) :
 
     connect(&diag, SIGNAL(initConnection(bool, QStringList)), this, SLOT(initGateway(bool,QStringList)));
     connect(&diag, SIGNAL(disconnect(bool)), this, SLOT(stopGateway(bool)));
+
+    connect(&camdiag, SIGNAL(openDev(int)), this, SLOT(openDev(int)));
+    connect(&camdiag, SIGNAL(closeDev()), this, SLOT(closeDev()));
 
     QPixmap i8Map("img/info8.jpg");
     i8Map = i8Map.scaled(40,40,Qt::KeepAspectRatio);
@@ -96,7 +118,7 @@ MainWindow::MainWindow(QWidget *parent) :
             "margin: 0.5px;"
             "width: 10px"
             "}";
-     ui->batteryStatus->setStyleSheet(myStyleSheet);
+    ui->batteryStatus->setStyleSheet(myStyleSheet);
 
     glWidget = new GLWidget;
     QHBoxLayout *hlayout = new QHBoxLayout;
@@ -183,6 +205,7 @@ MainWindow::~MainWindow()
 #ifdef OT
     ot->quit();
 #endif
+    oculus.close();
     delete ui;
 }
 
@@ -210,7 +233,7 @@ void MainWindow::pollGateway(){
     if(!ui->checkBox_stop->isChecked()){
         ui->customPlot->xAxis->moveRange(0.02);
         ui->customPlot->replot();
-    }    
+    }
     gw->pollMessages();
     timer->start(15);
 }
@@ -220,11 +243,11 @@ void MainWindow::initGateway(bool serial, QStringList data)
     timer->stop();
     qDebug() << data;
     if(serial){
-       uart->init(data.at(0).toLocal8Bit().data(),data.at(1).toInt());
-       gw = new Gateway(linkif);
+        uart->init(data.at(0).toLocal8Bit().data(),data.at(1).toInt());
+        gw = new Gateway(linkif);
     } else {
-       uart_udp->init(data.at(0).toLocal8Bit().data(),data.at(1).toLocal8Bit().data(),data.at(2).toInt());
-       gw = new Gateway(linkif_udp);
+        uart_udp->init(data.at(0).toLocal8Bit().data(),data.at(1).toLocal8Bit().data(),data.at(2).toInt());
+        gw = new Gateway(linkif_udp);
     }
     gw->init();
     gw->setPutter(this);
@@ -236,10 +259,20 @@ void MainWindow::stopGateway(bool serial)
 {
     timer->stop();
     if(serial){
-       uart->reset();
+        uart->reset();
     } else {
-       uart_udp->reset();
+        uart_udp->reset();
     }
+}
+
+void MainWindow::openDev(int i)
+{
+    capVideo.open(i + CV_CAP_V4L);
+}
+
+void MainWindow::closeDev()
+{
+    capVideo.release();
 }
 
 void MainWindow::on_setOPID_clicked(){
@@ -371,11 +404,11 @@ void MainWindow::keyPressEvent(QKeyEvent *event){
 void MainWindow::parseTopicData(const long topicId, const unsigned int len, const void *msg, const NetMsgInfo &netMsgInfo) {
     double *data = (double *)msg;
 
-//    qDebug() << topicId;
+    //    qDebug() << topicId;
     long alive = topicId;
     char dat[100];
-//    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) dat);
-//    uart.write(dat, length);
+    //    int length = gw.createNetworkMessage((char*)&alive,sizeof(alive),HEARTBEAT_TID,NOW(),(char*) dat);
+    //    uart.write(dat, length);
 
     if(topicId == BAT_TID){
 
@@ -409,8 +442,8 @@ void MainWindow::parseTopicData(const long topicId, const unsigned int len, cons
     }
 
     if(topicId == STATE_TID){
-         state = (Flight_states_t*) msg;
-//        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
+        state = (Flight_states_t*) msg;
+        //        qDebug() << "State" << sizeof(Flight_states_t) << (signed long) *state << MOTOR_OFF;
 
         switch (*state) {
         case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
@@ -845,17 +878,17 @@ void MainWindow::on_pushButton_load_alt_clicked()
         QByteArray data = file.read(8);
         QString start(data);
         if(start.compare("PID_ALT:") == 0){
-                data = file.read(sizeof(PID_values_t));
-                PID_values_t PID = (*(PID_values_t *) data.data());
-                    ui->doubleSpinBox_inP_alt->setValue(PID.inner.x);
-                    ui->doubleSpinBox_inI_alt->setValue(PID.inner.y);
-                    ui->doubleSpinBox_inD_alt->setValue(PID.inner.z);
-                    ui->doubleSpinBox_outP_alt->setValue(PID.outer.x);
-                    ui->doubleSpinBox_outI_alt->setValue(PID.outer.y);
-                    ui->doubleSpinBox_outD_alt->setValue(PID.outer.z);
-                    ui->doubleSpinBox_outLimit_alt->setValue(PID.outerLimit);
-                    ui->doubleSpinBox_filterW_alt->setValue(PID.omegaAlpha);
-                    ui->doubleSpinBox_filterDeltaW_alt->setValue(PID.deltaOmegaAlpha);
+            data = file.read(sizeof(PID_values_t));
+            PID_values_t PID = (*(PID_values_t *) data.data());
+            ui->doubleSpinBox_inP_alt->setValue(PID.inner.x);
+            ui->doubleSpinBox_inI_alt->setValue(PID.inner.y);
+            ui->doubleSpinBox_inD_alt->setValue(PID.inner.z);
+            ui->doubleSpinBox_outP_alt->setValue(PID.outer.x);
+            ui->doubleSpinBox_outI_alt->setValue(PID.outer.y);
+            ui->doubleSpinBox_outD_alt->setValue(PID.outer.z);
+            ui->doubleSpinBox_outLimit_alt->setValue(PID.outerLimit);
+            ui->doubleSpinBox_filterW_alt->setValue(PID.omegaAlpha);
+            ui->doubleSpinBox_filterDeltaW_alt->setValue(PID.deltaOmegaAlpha);
         } else {
             QMessageBox::information(this, tr("Wrong file format"),
                                      file.errorString());
@@ -882,9 +915,13 @@ void MainWindow::on_actionConnect_triggered(bool checked)
 }
 
 void MainWindow::processFrame(){
+
+    if(!capVideo.isOpened()){
+        return;
+    }
+
     capVideo.read(frame);
     if(frame.empty()){
-        qDebug() << "Empty Frame";
         return;
     }
 
@@ -892,10 +929,17 @@ void MainWindow::processFrame(){
     cv::resize(frame, frame, cv::Size(360,240));
     QImage img((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_RGB888);
 
+    if(oculusActive){
+        int w = left.width();
+        int h = left.height();
+        QPixmap scale = QPixmap::fromImage(img).scaled(w,h,Qt::KeepAspectRatio);
+        left.setPixmap(scale);
+        right.setPixmap(scale);
+    }
     if(ui->tabWidget_2->currentIndex() == 2){
         // Show big time
-//        if(!videoLayoutBig->isEmpty())
-            videoLayoutBig->removeWidget(videoView);
+        //        if(!videoLayoutBig->isEmpty())
+        videoLayoutBig->removeWidget(videoView);
         if(!smallLayout->isEmpty()) {
             smallLayout->removeWidget(videoView);
             smallLayout->addWidget(map);
@@ -917,6 +961,23 @@ void MainWindow::processFrame(){
         videoView->setPixmap(QPixmap::fromImage(img));
         videoView->setScaledContents(true);
     }
-//    ui->video->setPixmap(QPixmap::fromImage(img));
+
+
+
+    //    ui->video->setPixmap(QPixmap::fromImage(img));
 }
 
+
+void MainWindow::on_actionCamera_triggered()
+{
+    camdiag.exec();
+}
+
+void MainWindow::on_checkBox_oculus_clicked(bool checked)
+{
+    oculusActive = checked;
+    if(checked)
+        oculus.showFullScreen();
+    else
+        oculus.close();
+}

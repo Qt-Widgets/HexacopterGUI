@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-QT       += core gui opengl widgets serialport printsupport webkit webkitwidgets
+QT       += core gui opengl widgets serialport printsupport webkit webkitwidgets multimedia
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
@@ -34,7 +34,8 @@ SOURCES += main.cpp\
         Mapplot/copter2d.cpp \
         Mapplot/mapplot.cpp \
         Mapplot/ship.cpp \
-        worldmagneticmodel.cpp
+        worldmagneticmodel.cpp \
+    cameradialog.cpp
 
 HEADERS += mainwindow.h \
         copter.h \
@@ -69,18 +70,19 @@ HEADERS += mainwindow.h \
         Mapplot/copter2d.h \
         Mapplot/mapplot.h \
         Mapplot/ship.h \
-        worldmagneticmodel.h
+        worldmagneticmodel.h \
+    cameradialog.h
 
 FORMS   += mainwindow.ui \
-    interfacedialog.ui
+    interfacedialog.ui \
+    cameradialog.ui
 
 LIBS += -L/usr/local/lib -lvrpn -lquat -pthread
 
-RESOURCES += gpscontrol/gps.qrc \
+RESOURCES += \
             img/img.qrc
 
-OTHER_FILES += gpscontrol/gTracking.html \
-               gpscontrol/gTracking.js
+OTHER_FILES +=
 
 INCLUDEPATH += /usr/local/include/opencv
 LIBS += -L/usr/local/lib \
@@ -92,7 +94,5 @@ LIBS += -L/usr/local/lib \
 -lopencv_features2d \
 -lopencv_calib3d \
 -lopencv_objdetect \
--lopencv_contrib \
--lopencv_legacy \
 -lopencv_flann \
 -lopencv_videoio
