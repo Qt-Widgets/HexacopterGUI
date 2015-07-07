@@ -99,7 +99,6 @@ typedef enum Flight_states_e : char{
     MOTOR_OFF = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING
 } Flight_states_t;
 
-
 ////////////////////////////////////////////////////////////////////////////
 // Short topics for low data rates
 
@@ -117,27 +116,86 @@ typedef struct{
 } Proximityf_t;
 
 typedef struct{
-    float height, speed, pressure, temp;
-} Barometricf_t;
+    float height;
+} Height_t;
+
+typedef struct{
+    float percent;
+} Batteryf_t;
 
 typedef struct {
     float lat, lon;
-    float height, hMSL;
+    float height;
     Vector3Df_t NED;
-    Vector3Df_t velNED;
 } GPS_small_t;
 
 typedef struct {
     Flight_states_t state;
     Quaternionf_t quat;
     GPS_small_t gps;
-    Vector3Df_t accel;
-    Vector3Df_t gyro;
-    Vector3Df_t mag;
-    float voltage;
-    Barometricf_t baro;
+    Batteryf_t battery;
     Proximityf_t lidar;
-    Proximityf_t sonic;
+    Height_t baro;
+    Height_t sonic;
 } System_State_t;
+
+class Vector2D{
+public:
+    double x,y;
+    Vector2D(double x, double y){
+        this->x = x;
+        this->y = y;
+    }
+    Vector2D operator+(const Vector2D &r){
+        return Vector2D(this->x + r.x, this->y + r.y);
+    }
+    Vector2D operator-(const Vector2D &r){
+        return Vector2D(this->x - r.x, this->y - r.y);
+    }
+    Vector2D rotate(double angle){
+        double ca = cos(angle);
+        double sa = sin(angle);
+        return Vector2D( x* ca - y * sa, x * sa + y * ca);
+    }
+};
+
+typedef enum frame : char {
+    BODY = 0, NED, GEO
+} frame_t;
+
+
+class Pose_t{
+public:
+    Vector2D v;
+    double phi;
+    frame_t frame;
+    Pose_t():
+        v(0,0)
+    {
+        this->phi = 0;
+        this->frame = BODY;
+    }
+    Pose_t(double x, double y, double phi, frame_t frame = NED) :
+        v(x,y)
+    {
+        this->phi = phi;
+        this->frame = frame;
+    }
+    Pose_t(Vector2D vec, double phi, frame_t frame = NED) :
+        v(vec.x, vec.y)
+    {
+        this->phi = phi;
+        this->frame = frame;
+    }
+    Pose_t operator+(const Pose_t &r){
+        return Pose_t(this->v.x + r.v.x, this->v.y + r.v.y, this->phi + r.phi);
+    }
+    Pose_t operator-(const Pose_t &r){
+        return Pose_t(this->v.x - r.v.x, this->v.y - r.v.y, this->phi - r.phi);
+    }
+    Pose_t rotate(double angle){
+        return Pose_t(v.rotate(angle), phi);
+    }
+} ;
 
 #endif /* DATATYPES_H_ */

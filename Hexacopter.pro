@@ -35,7 +35,9 @@ SOURCES += main.cpp\
         Mapplot/mapplot.cpp \
         Mapplot/ship.cpp \
         worldmagneticmodel.cpp \
-    cameradialog.cpp
+    cameradialog.cpp \
+    screen2.cpp \
+    QcGaugeWidget/qcgaugewidget.cpp
 
 HEADERS += mainwindow.h \
         copter.h \
@@ -71,11 +73,14 @@ HEADERS += mainwindow.h \
         Mapplot/mapplot.h \
         Mapplot/ship.h \
         worldmagneticmodel.h \
-    cameradialog.h
+    cameradialog.h \
+    screen2.h \
+    QcGaugeWidget/qcgaugewidget.h
 
 FORMS   += mainwindow.ui \
     interfacedialog.ui \
-    cameradialog.ui
+    cameradialog.ui \
+    screen2.ui
 
 LIBS += -L/usr/local/lib -lvrpn -lquat -pthread
 

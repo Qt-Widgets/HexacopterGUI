@@ -11,7 +11,7 @@ class Copter2D : public QCPCurve
     QCPCurve path;
     QCPCurve green;
     QCPCurve orange;
-    double heading;
+    double heading, x, y;
 
     bool rescale;
 
@@ -19,13 +19,14 @@ class Copter2D : public QCPCurve
 public:
     explicit Copter2D(QCPAxis *keyAxis, QCPAxis *valueAxis, double heading = 0, QObject *parent = 0);
 
-    void rotate(double angle);
-    void translate(double x, double y);
-    void scaleArmSize(double newArm);
+    void drawArms();
+    void updatePose(double x, double y, double rot);
+    void setHeading(double angle);
+    void setPosition(double x, double y);
+    void reset();
 
 public slots:
     void scale(QCPRange range);
-    void setHeading(double angle);
 };
 
 #endif // COPTER2D_H

@@ -33,9 +33,9 @@ void HW_HAL_UART_UDP::readyRead(){
     QHostAddress sender;
     quint16 senderPort;
     socket->readDatagram(buffer, length, &sender, &senderPort);
-//    qDebug() << "Message from: " << sender.toString();
-//    qDebug() << "Meesage port: " << senderPort;
-//    qDebug() << "Message size  " << length;
+    qDebug() << "Message from: " << sender.toString();
+    qDebug() << "Meesage port: " << senderPort;
+    qDebug() << "Message size  " << length;
 
 }
 

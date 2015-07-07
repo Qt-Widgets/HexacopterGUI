@@ -8,8 +8,6 @@ Mapplot::Mapplot() : QCustomPlot()
     this->yAxis->setScaleRatio(this->xAxis, (double) this->size().width() / (double)   this->size().height() );
 
 
-    copterX = 0;
-    copterY = 0;
     ship = new Ship(this->xAxis, this->yAxis);
     this->addPlottable(ship);
     this->replot();
@@ -22,11 +20,16 @@ Mapplot::Mapplot() : QCustomPlot()
     connect(this->xAxis, SIGNAL(rangeChanged(QCPRange)), copter, SLOT(scale(QCPRange)),Qt::QueuedConnection);
 }
 
-void Mapplot::moveDrone(double x, double y)
+void Mapplot::setPoseDrone(double x, double y, double angle)
 {
-    copter->translate(x - copterX, y - copterY);
-    copterX = x;
-    copterY = y;
+    copter->updatePose(x,y,angle);
     this->replot();
 }
+
+void Mapplot::resetGPS()
+{
+    copter->reset();
+    this->replot();
+}
+
 

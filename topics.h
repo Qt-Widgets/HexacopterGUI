@@ -7,7 +7,7 @@
 #include "matlib.h"
 
 
-//#define LIMITED_DATA_RATE
+#define LIMITED_DATA_RATE
 
 
 #define OFFSET                      3000
@@ -20,10 +20,13 @@
 #define TOPICS_TO_FORWARD_TID       3004
 #define SET_PID_ALT_VALUES_TID      3005
 #define FLIGHT_CTRL_TID             3006
+#define CORRECT_BEARING_TID         3007
+#define SET_PID_POSE_VAL_TID        3008
 
 #define ENGINE_CTRL_TID             2001
 #define DESIRED_YPR_TID             2002
-#define DESIRED_THRUST_TID           2003
+#define DESIRED_THRUST_TID          2003
+#define DESIRED_POSE_TID            2006
 
 //#define HEARTBEAT_TID               9999
 #define OT_TID                      -1
@@ -36,7 +39,7 @@ struct Topic{
 
 #ifdef LIMITED_DATA_RATE
 Topic myTopics[] = {
-                    {1070 + OFFSET, "System State", "q0,q1,q2,q3,wx,wy,wz,lat,lon,HeightGPS,HeightMSL,NEDX,NEDY,NEDZ,velNEDX,velNEDy,velNEDZ,Voltage,Percent,AccX,AccY,AccZ,GyroX,GyroY,GyroZ,MagX,MagY,MagZ,HeightB,SpeedB,PressureB,TemperatureB,HeightL,SpeedL,HeightS,SpeedS", sizeof(System_State_t) / sizeof(float) + sizeof(System_State_t) % sizeof(float)},      // Special case!
+                    {1070 + OFFSET, "System State", "q0,q1,q2,q3,lat,lon,HeightMSL,NEDX,NEDY,NEDZ,Percent,HeightL,SpeedL,HeightB,HeightS", sizeof(System_State_t) / sizeof(float) + sizeof(System_State_t) % sizeof(float)},      // Special case!
                    };
 #else
 Topic myTopics[] = {

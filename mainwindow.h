@@ -3,7 +3,8 @@
 
 #include <QMainWindow>
 #include "glwidget.h"
-//#include <QtSerialPort/QSerialPort>
+
+#include "worldmagneticmodel.h"
 
 #include <unistd.h>
 #include <sys/time.h>
@@ -23,6 +24,8 @@
 #include "opencv2/imgproc.hpp"
 
 #include "Mapplot/mapplot.h"
+
+#include "screen2.h"
 
 static QString colorplate[] = {"aquamarine", "blue", "blueviolet", "brown", "cadetblue", "chartreuse",
                                "coral", "cornflowerblue", "crimson", "darkblue", "darkcyan",
@@ -58,11 +61,17 @@ public slots:
     void stopGateway(bool serial);
     void openDev(int i);
     void closeDev();
+    void resendMsg();
 
 signals:
     void imuChanged(float roll,float pitch,float yaw);
     void gpsLLH(double lat, double lon, double height);
     void gpsNED(double east, double north);
+    void hmdHeight(float height);
+    void setHeading(float angle);
+    void setShipDirection(double x, double y);
+    void stopFlightTime();
+    void startFlightTime();
 
 private slots:
     void on_setOPID_clicked();
@@ -91,7 +100,14 @@ private slots:
 
     void on_actionCamera_triggered();
 
-    void on_checkBox_oculus_clicked(bool checked);
+    void on_checkBox_screen_clicked(bool checked);
+
+    void on_pushButton_resetGPS_clicked();
+    void on_setOPID_pos_clicked();
+    void on_pushButton_save_pos_clicked();
+    void on_pushButton_load_pos_clicked();
+    void on_set_Goal_Pose_clicked();
+    void on_frameSelect_currentIndexChanged(int index);
 
 protected:
     void keyPressEvent(QKeyEvent* event);
@@ -112,17 +128,19 @@ private:
     cv::Mat frame;
     QTimer* tmrCam;
 
+    WorldMagneticModel wmm;
+    double bearing;
+
     InterfaceDialog diag;
     cameradialog camdiag;
     void parse(QByteArray data);
-    QTimer *timer;
+    QTimer *polltmr;
+    QTimer *timeoutTmr;
     Ui::MainWindow *ui;
     GLWidget *glWidget;
 
-    QWidget oculus;
-    QLabel left, right;
-    QHBoxLayout oculusLayout;
-    bool oculusActive;
+    Screen2 scHMD;
+    bool screenActive;
 
     QByteArray message;
     bool ff;

@@ -116,8 +116,8 @@ void InterfaceDialog::on_comboBox_currentIndexChanged(int index)
             com->setParent(NULL);
             baudrate->setParent(NULL);
         }
-        upperLabel->setText("Antenna IP");
-        middleLabel->setText("Local IP");
+        upperLabel->setText("Local IP");
+        middleLabel->setText("Antenna IP");
         lowerLabel->setText("Port");
         layout->addWidget(host,0,1,1,1);
         layout->addWidget(antenna,1,1,1,1);

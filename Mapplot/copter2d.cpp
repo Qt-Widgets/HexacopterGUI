@@ -9,8 +9,25 @@ Copter2D::Copter2D(QCPAxis *keyAxis, QCPAxis *valueAxis, double heading, QObject
     orange(keyAxis, valueAxis)
 {
     arm = 2.0;
+    heading = 0;
 
     rescale = false;
+
+    drawArms();
+    path.setPen(QPen(QColor::fromRgb(255, 117, 25), 2.0));
+
+    trackPath();
+}
+
+void Copter2D::trackPath()
+{
+    QCPCurveDataMap *dataMap = this->data();
+    double x = dataMap->first().key;
+    double y = dataMap->first().value;
+    path.addData(x,y);
+}
+
+void Copter2D::drawArms(){
     this->clearData();
     green.clearData();
     orange.clearData();
@@ -33,80 +50,44 @@ Copter2D::Copter2D(QCPAxis *keyAxis, QCPAxis *valueAxis, double heading, QObject
     orange.addData(arm * cos(270/180.*M_PI), arm * sin(270/180.*M_PI));
     orange.addData(0,0);
     orange.setPen(QPen(QColor::fromRgb(255, 117, 25), 4.0));
-
-    path.setPen(QPen(QColor::fromRgb(255, 117, 25), 2.0));
-
-    setHeading(heading);
-    trackPath();
 }
 
-void Copter2D::trackPath()
-{
-    QCPCurveDataMap *dataMap = this->data();
-    double x = dataMap->first().key;
-    double y = dataMap->first().value;
-    path.addData(x,y);
+void Copter2D::updatePose(double x, double y, double rot){
+    drawArms();
+    setHeading(rot);
+    setPosition(x,y);
 }
 
-void Copter2D::setHeading(double angle)
+void Copter2D::setHeading(double heading)
 {
-    heading = angle;
+    this->heading = heading;
     QCPCurveDataMap *dataMap = this->data();
     foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(heading) - data.value * sin(heading);
-        double newY = data.key * sin(heading) + data.value * cos(heading);
+        double newX = data.key * cos(-heading) - data.value * sin(-heading);
+        double newY = data.key * sin(-heading) + data.value * cos(-heading);
         this->removeData(data.t);
         this->addData(newX, newY);
     }
     dataMap = green.data();
     foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(heading) - data.value * sin(heading);
-        double newY = data.key * sin(heading) + data.value * cos(heading);
+        double newX = data.key * cos(-heading) - data.value * sin(-heading);
+        double newY = data.key * sin(-heading) + data.value * cos(-heading);
         green.removeData(data.t);
         green.addData(newX, newY);
     }
     dataMap = orange.data();
     foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(heading) - data.value * sin(heading);
-        double newY = data.key * sin(heading) + data.value * cos(heading);
+        double newX = data.key * cos(-heading) - data.value * sin(-heading);
+        double newY = data.key * sin(-heading) + data.value * cos(-heading);
         orange.removeData(data.t);
         orange.addData(newX, newY);
     }
 }
 
-void Copter2D::rotate(double angle)
+void Copter2D::setPosition(double x, double y)
 {
-    heading += angle;
-    if(heading > M_PI)
-        heading -= 2 * M_PI;
-    else if(heading < M_PI)
-        heading += 2 * M_PI;
-
-    QCPCurveDataMap *dataMap = this->data();
-    foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(angle) - data.value * sin(angle);
-        double newY = data.key * sin(angle) + data.value * cos(angle);
-        this->removeData(data.t);
-        this->addData(newX, newY);
-    }
-    dataMap = green.data();
-    foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(angle) - data.value * sin(angle);
-        double newY = data.key * sin(angle) + data.value * cos(angle);
-        green.removeData(data.t);
-        green.addData(newX, newY);
-    }
-    dataMap = orange.data();
-    foreach(QCPCurveData data, *dataMap){
-        double newX = data.key * cos(angle) - data.value * sin(angle);
-        double newY = data.key * sin(angle) + data.value * cos(angle);
-        orange.removeData(data.t);
-        orange.addData(newX, newY);
-    }
-}
-
-void Copter2D::translate(double x, double y)
-{
+    this->x = x;
+    this->y = y;
     QCPCurveDataMap *dataMap = this->data();
     foreach(QCPCurveData data, *dataMap){
         double newX = data.key + x;
@@ -131,42 +112,21 @@ void Copter2D::translate(double x, double y)
     trackPath();
 }
 
-void Copter2D::scaleArmSize(double newArm)
+void Copter2D::reset()
 {
-    QCPCurveDataMap *dataMap = this->data();
-    QCPCurveData data = dataMap->first();
-    double dX = data.key;
-    double dY = data.value;
+    qDebug() << path.data()->size();
+    path.clearData();
 
-    arm = newArm;
-
-    this->clearData();
-    green.clearData();
-    orange.clearData();
-
-    this->addData(0,0);
-    for (int i = 90; i > -270; i = i - 120){
-        this->addData(arm * cos(i/180.*M_PI), arm * sin(i/180.*M_PI));
-        this->addData(0,0);
-    }
-
-    green.addData(0,0);
-    green.addData(arm * cos(30/180.*M_PI), arm * sin(30/180.*M_PI));
-    green.addData(0,0);
-    green.addData(arm * cos(150/180.*M_PI), arm * sin(150/180.*M_PI));
-    green.addData(0,0);
-
-    orange.addData(0,0);
-    orange.addData(arm * cos(270/180.*M_PI), arm * sin(270/180.*M_PI));
-    orange.addData(0,0);
-
-    setHeading(heading);
-    translate(dX, dY);
+    qDebug() << path.data()->size();
+    trackPath();
 }
+
 
 void Copter2D::scale(QCPRange range)
 {
-//    qDebug() << range.upper << range.lower << range.size();
     double dist = range.upper - range.lower;
-    scaleArmSize(dist / 50.);
+    arm = dist / 50.;
+    updatePose(x,y,heading);
+
+
 }

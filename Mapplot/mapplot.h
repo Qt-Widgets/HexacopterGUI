@@ -9,10 +9,10 @@ class Mapplot : public QCustomPlot
 {
     Ship *ship;
     Copter2D *copter;
-    double copterX, copterY;
 public:
     Mapplot();
-    void moveDrone(double x, double y);
+    void setPoseDrone(double x, double y, double angle);
+    void resetGPS();
 };
 
 #endif // MAPPLOT_H

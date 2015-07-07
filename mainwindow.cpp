@@ -49,32 +49,15 @@ MainWindow::MainWindow(QWidget *parent) :
     Putter(),
     diag(),
     camdiag(),
-    oculus(),
-    oculusLayout(),
-    left(),
-    right()
+    scHMD(),
+    wmm()
 {
     ui->setupUi(this);
 
-    if(QApplication::screens().size() > 1){
-        QScreen* screen = QApplication::screens().at(1);
-        QRect screenres = screen->geometry();
-        oculus.move(QPoint(screenres.x(), screenres.y()));
-        oculus.resize(screenres.width(), screenres.height());
-        oculus.setLayout(&oculusLayout);
-        oculusLayout.addWidget(&left);
-        oculusLayout.addWidget(&right);
-
-        QPalette palette = oculus.palette();
-        palette.setColor(oculus.backgroundRole(), Qt::black);
-        palette.setColor(oculus.backgroundRole(), Qt::black);
-        oculus.setPalette(palette);
-
-    } else {
-        ui->checkBox_oculus->setEnabled(false);
-        qDebug() << "No oculus attached";
+    if(QApplication::screens().size() <= 1){
+        ui->checkBox_screen->setEnabled(false);
+        qDebug() << "No 2nd screen attached";
     }
-
 
     tmrCam = new QTimer(this);
     connect(tmrCam, SIGNAL(timeout()), this, SLOT(processFrame()));
@@ -94,6 +77,13 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(&camdiag, SIGNAL(openDev(int)), this, SLOT(openDev(int)));
     connect(&camdiag, SIGNAL(closeDev()), this, SLOT(closeDev()));
 
+    connect(this, SIGNAL(hmdHeight(float)), &scHMD, SLOT(setHeight(float)));
+    connect(this, SIGNAL(setHeading(float)), &scHMD, SLOT(setHeading(float)));
+    connect(this, SIGNAL(setShipDirection(double, double)), &scHMD, SLOT(setHomeDirection(double, double)));
+    connect(this, SIGNAL(startFlightTime()), &scHMD, SLOT(startTimer()));
+    connect(this, SIGNAL(stopFlightTime()), &scHMD, SLOT(stopTimer()));
+
+
     QPixmap i8Map("img/info8.jpg");
     i8Map = i8Map.scaled(40,40,Qt::KeepAspectRatio);
     ui->label_i8->setPixmap(i8Map);
@@ -111,6 +101,7 @@ MainWindow::MainWindow(QWidget *parent) :
             "border: 2px solid grey;"
             "border-radius: 5px;"
             "text-align: center;"
+            "font: bold 20px;"
             "}"
 
             "QProgressBar::chunk {"
@@ -134,8 +125,11 @@ MainWindow::MainWindow(QWidget *parent) :
 #endif
 
 
-    timer = new QTimer(this);
-    connect(timer, SIGNAL(timeout()), this, SLOT(pollGateway()));
+    polltmr = new QTimer(this);
+    connect(polltmr, SIGNAL(timeout()), this, SLOT(pollGateway()));
+
+    timeoutTmr = new QTimer(this);
+    connect(timeoutTmr, SIGNAL(timeout()), this, SLOT(resendMsg()));
 
     ui->customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectLegend | QCP::iSelectAxes | QCP::iSelectPlottables);
     QFont legendFont = font();
@@ -205,7 +199,7 @@ MainWindow::~MainWindow()
 #ifdef OT
     ot->quit();
 #endif
-    oculus.close();
+    scHMD.close();
     delete ui;
 }
 
@@ -220,6 +214,7 @@ Flight_states_t* state;
 
 bool MainWindow::putGeneric(const long topicId, const unsigned int len, const void* msg, const NetMsgInfo& netMsgInfo){
 
+//    qDebug() << topicId;
 #ifdef LIMITED_DATA_RATE
     parseTopicLimitedData(topicId, len, msg, netMsgInfo);
 #else
@@ -235,12 +230,12 @@ void MainWindow::pollGateway(){
         ui->customPlot->replot();
     }
     gw->pollMessages();
-    timer->start(15);
+    polltmr->start(15);
 }
 
 void MainWindow::initGateway(bool serial, QStringList data)
 {
-    timer->stop();
+    polltmr->stop();
     qDebug() << data;
     if(serial){
         uart->init(data.at(0).toLocal8Bit().data(),data.at(1).toInt());
@@ -251,13 +246,16 @@ void MainWindow::initGateway(bool serial, QStringList data)
     }
     gw->init();
     gw->setPutter(this);
-    timer->start(15);
+    bearing = 0;
+    gw->sendNetworkMessage((char*)&bearing,sizeof(bearing),CORRECT_BEARING_TID ,NOW());
+    timeoutTmr->start(1000);
+    polltmr->start(15);
     sendSelectedTopics();
 }
 
 void MainWindow::stopGateway(bool serial)
 {
-    timer->stop();
+    polltmr->stop();
     if(serial){
         uart->reset();
     } else {
@@ -273,6 +271,12 @@ void MainWindow::openDev(int i)
 void MainWindow::closeDev()
 {
     capVideo.release();
+}
+
+void MainWindow::resendMsg()
+{
+    gw->sendNetworkMessage((char*)&bearing,sizeof(bearing),CORRECT_BEARING_TID ,NOW());
+    timeoutTmr->start(1000);
 }
 
 void MainWindow::on_setOPID_clicked(){
@@ -420,6 +424,7 @@ void MainWindow::parseTopicData(const long topicId, const unsigned int len, cons
                 "border: 2px solid grey;"
                 "border-radius: 5px;"
                 "text-align: center;"
+                "font: bold 20px;"
                 "}"
 
                 "QProgressBar::chunk {"
@@ -478,7 +483,7 @@ void MainWindow::parseTopicData(const long topicId, const unsigned int len, cons
 
     if(topicId == GPS_TID){
         gps = (Sensor_GPS_t*) msg;
-        map->moveDrone(gps->NED.y, gps->NED.x);
+        map->setPoseDrone(gps->NED.y, gps->NED.x, ypr.yaw);
     }
 
 
@@ -573,12 +578,105 @@ void MainWindow::parseTopicData(const long topicId, const unsigned int len, cons
 
 void MainWindow::parseTopicLimitedData(const long topicId, const unsigned int len, const void *msg, const NetMsgInfo &netMsgInfo)
 {
-    qDebug() << "TopicID" << topicId;
-
-
-    System_State_t *state;
+    static bool clk_on = false;
+    System_State_t *state = (System_State_t*) msg;
     double time = QTime::currentTime().msecsSinceStartOfDay() / 1000. - start;
 
+    // Battery Color
+    QString myStyleSheet =
+            "QProgressBar {"
+            "border: 2px solid grey;"
+            "border-radius: 5px;"
+            "text-align: center;"
+            "font: bold 20px;"
+            "}"
+
+            "QProgressBar::chunk {"
+            "background-color:";
+    if(state->battery.percent < 0.3)
+        myStyleSheet.append(" red;");
+    else if(state->battery.percent  < 0.65)
+        myStyleSheet.append(" orange;");
+    else
+        myStyleSheet.append(" Lime;");
+    myStyleSheet.append("margin: 0.5px;"
+                        "width: 10px"
+                        " }");
+
+    ui->batteryStatus->setStyleSheet(myStyleSheet);
+    ui->batteryStatus->setValue(state->battery.percent  * 100);
+
+    switch (state->state) {
+    case MOTOR_OFF: // = 0, ARMED, TAKE_OFF, ALTITUDE_HOLD, MANUAL_FLIGHT, LANDING:
+        ui->flight_state->setText("MOTOR OFF");
+        if(clk_on){
+            emit stopFlightTime();
+            clk_on = false;
+        }
+        break;
+    case ARMED:
+        ui->flight_state->setText("ARMED");
+        break;
+    case TAKE_OFF:
+        ui->flight_state->setText("TAKE OFF");
+        break;
+    case ALTITUDE_HOLD:
+        ui->flight_state->setText("ALTITUDE HOLD");
+        break;
+    case MANUAL_FLIGHT:
+        ui->flight_state->setText("MANUAL FLIGHT");
+        if(!clk_on){
+            emit startFlightTime();
+            clk_on = true;
+        }
+        break;
+    case LANDING:
+        ui->flight_state->setText("LANDING");
+        break;
+    default:
+        break;
+    }
+
+    // Calculate YPR
+    Quaternion q(state->quat.q0, state->quat.q.x, state->quat.q.y, state->quat.q.z);
+    YPR ypr = q.toYPR();
+
+    // Update graphic
+    ui->q0->display(state->quat.q0);
+    ui->q1->display(state->quat.q.x);
+    ui->q2->display(state->quat.q.y);
+    ui->q3->display(state->quat.q.z);
+    ui->roll->display(ypr.roll * 180 / M_PI);
+    ui->pitch->display(ypr.pitch * 180 / M_PI);
+    ui->yaw->display(ypr.yaw * 180 / M_PI);
+
+    ui->wroll->setEnabled(false);
+    ui->wpitch->setEnabled(false);
+    ui->wyaw->setEnabled(false);
+
+    // update 3D view
+    emit imuChanged(ypr.roll * 180 / M_PI, ypr.pitch  * 180 / M_PI, (ypr.yaw  * 180 / M_PI) - MY_NORTH);
+
+    // Update Compass on HMD
+    emit setHeading(ypr.yaw);
+    emit setShipDirection(state->gps.NED.x, state->gps.NED.y);
+
+    // update Height on HMD
+    emit hmdHeight(state->lidar.height);
+
+    // update map
+    map->setPoseDrone(state->gps.NED.y, state->gps.NED.x, ypr.yaw);
+
+    // Calculate Correct Bearing
+    if(state->gps.lat == 0 && state->gps.lon == 0){
+        bearing = 0;
+        ui->flight_state->setText("NO GPS FIX");
+    } else {
+        bearing = wmm.getMagDeclination(state->gps.lat, state->gps.lon, state->gps.height) / 180. * M_PI;
+//        qDebug() << "Bearing correction at[" << state->gps.lat << "," << state->gps.lon << "]:" <<  bearing;
+    }
+    gw->sendNetworkMessage((char*)&bearing,sizeof(bearing),CORRECT_BEARING_TID ,NOW());
+    timeoutTmr->start(1000);
     if(topicId == myTopics[0].id){
 
         float *data = (float *)msg + 1;
@@ -926,16 +1024,21 @@ void MainWindow::processFrame(){
     }
 
     cv::cvtColor(frame, frame, CV_BGR2RGB);
-    cv::resize(frame, frame, cv::Size(360,240));
     QImage img((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_RGB888);
 
-    if(oculusActive){
-        int w = left.width();
-        int h = left.height();
-        QPixmap scale = QPixmap::fromImage(img).scaled(w,h,Qt::KeepAspectRatio);
-        left.setPixmap(scale);
-        right.setPixmap(scale);
+    if(screenActive){
+        int w = scHMD.screenWidth();
+        int h = scHMD.screenHeight();
+        QPixmap scale = QPixmap::fromImage(img).scaled(w,h);
+        scHMD.setImagePixmap(scale);
+        scHMD.setBatteryStyleSheet(ui->batteryStatus->styleSheet());
+        scHMD.setBattery(ui->batteryStatus->value());
+        scHMD.setFlightState(ui->flight_state->text());
+
+//        battery2.setStyleSheet(ui->batteryStatus->styleSheet());
+//        battery2.setValue(ui->batteryStatus->value());
     }
+
     if(ui->tabWidget_2->currentIndex() == 2){
         // Show big time
         //        if(!videoLayoutBig->isEmpty())
@@ -950,6 +1053,8 @@ void MainWindow::processFrame(){
         videoView->setScaledContents(true);
     } else {
         // Show small time
+        cv::resize(frame, frame, cv::Size(360,240));
+        QImage imgSmall((uchar*)frame.data, frame.cols, frame.rows, frame.step, QImage::Format_RGB888);
         if(!videoLayoutBig->isEmpty())
             videoLayoutBig->removeWidget(videoView);
         if(!smallLayout->isEmpty()){
@@ -958,7 +1063,7 @@ void MainWindow::processFrame(){
             mapLayoutBig->addWidget(map);
         }
         smallLayout->addWidget(videoView);
-        videoView->setPixmap(QPixmap::fromImage(img));
+        videoView->setPixmap(QPixmap::fromImage(imgSmall));
         videoView->setScaledContents(true);
     }
 
@@ -973,11 +1078,124 @@ void MainWindow::on_actionCamera_triggered()
     camdiag.exec();
 }
 
-void MainWindow::on_checkBox_oculus_clicked(bool checked)
+void MainWindow::on_checkBox_screen_clicked(bool checked)
 {
-    oculusActive = checked;
+    screenActive = checked;
     if(checked)
-        oculus.showFullScreen();
+        scHMD.showFullScreen();
     else
-        oculus.close();
+        scHMD.close();
+}
+
+
+void MainWindow::on_pushButton_resetGPS_clicked()
+{
+    map->resetGPS();
+}
+
+void MainWindow::on_setOPID_pos_clicked()
+{
+    PID_values_t altPID;
+    altPID.outer = RODOS::Vector3D(ui->doubleSpin_posP->value(), ui->doubleSpin_posI->value(), ui->doubleSpin_posD->value());
+    altPID.outerLimit = ui->doubleSpin_posLim->value();
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&altPID,sizeof(altPID),SET_PID_POSE_VAL_TID ,NOW());
+}
+
+void MainWindow::on_pushButton_save_pos_clicked()
+{
+    windowOpen = true;
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save PIDP Values"), "",
+                                                    tr("PIDP Values (*.pidp)"));
+    if (fileName.isEmpty()){
+        windowOpen = false;
+        return;
+    } else {
+        if(!fileName.endsWith(".pidp")){
+            fileName.append(".pidp");
+        }
+
+        QFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly)) {
+            QMessageBox::information(this, tr("Unable to open file"),
+                                     file.errorString());
+            return;
+        }
+
+        PID_values_t POSPID;
+        POSPID.outer = RODOS::Vector3D(ui->doubleSpin_posP->value(), ui->doubleSpin_posI->value(), ui->doubleSpin_posD->value());
+        POSPID.outerLimit = ui->doubleSpin_posLim->value();
+
+        char start[] = "PID_POS:";
+        file.write(start,8);
+        file.write((char*)&POSPID,sizeof(POSPID));
+        file.close();
+    }
+    windowOpen = false;
+}
+
+void MainWindow::on_pushButton_load_pos_clicked()
+{
+    windowOpen = true;
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("Save PIDP Values"), "",
+                                                    tr("PIDP Values (*.pidp)"));
+    if (fileName.isEmpty()){
+        windowOpen = false;
+        return;
+    }else {
+
+        QFile file(fileName);
+
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::information(this, tr("Unable to open file"),
+                                     file.errorString());
+            return;
+        }
+        //        file.read(5 + sizeof(PID_values_t));
+        QByteArray data = file.read(8);
+        QString start(data);
+        if(start.compare("PID_POS:") == 0){
+            data = file.read(sizeof(PID_values_t));
+            PID_values_t PID = (*(PID_values_t *) data.data());
+            ui->doubleSpin_posP->setValue(PID.outer.x);
+            ui->doubleSpin_posI->setValue(PID.outer.y);
+            ui->doubleSpin_posD->setValue(PID.outer.z);
+            ui->doubleSpin_posLim->setValue(PID.outerLimit);
+        } else {
+            QMessageBox::information(this, tr("Wrong file format"),
+                                     file.errorString());
+        }
+    }
+    windowOpen = false;
+}
+
+
+void MainWindow::on_set_Goal_Pose_clicked()
+{
+    Pose_t pose(ui->doubleSpinBox_Pose_1->value(), ui->doubleSpinBox_Pose_2->value(), ui->doubleSpinBox_Pose_heading->value() / 180. * M_PI);
+    pose.frame = (frame_t) ui->frameSelect->currentIndex();
+    if(gw != NULL)
+        gw->sendNetworkMessage((char*)&pose,sizeof(pose),DESIRED_POSE_TID ,NOW());
+}
+
+void MainWindow::on_frameSelect_currentIndexChanged(int index)
+{
+    switch (index) {
+    case BODY:
+        ui->label_pos1->setText("x");
+        ui->label_pos2->setText("y");
+        break;
+    case NED:
+        ui->label_pos1->setText("North");
+        ui->label_pos2->setText("East");
+        break;
+    case GEO:
+        ui->label_pos1->setText("Lat");
+        ui->label_pos2->setText("Lon");
+        break;
+    default:
+        break;
+    }
 }
